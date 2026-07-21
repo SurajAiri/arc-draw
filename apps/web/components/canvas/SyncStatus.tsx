@@ -15,7 +15,7 @@ const stateConfig: Record<
   saved: {
     icon: Check,
     label: "Saved",
-    className: "text-emerald-400",
+    className: "text-muted-foreground",
   },
   saving: {
     icon: Loader2,
@@ -25,12 +25,12 @@ const stateConfig: Record<
   syncing: {
     icon: Cloud,
     label: "Syncing…",
-    className: "text-primary",
+    className: "text-foreground",
   },
   conflict: {
     icon: AlertTriangle,
     label: "Conflict!",
-    className: "text-amber-400",
+    className: "text-destructive",
   },
   offline: {
     icon: CloudOff,

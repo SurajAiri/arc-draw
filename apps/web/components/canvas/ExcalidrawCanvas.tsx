@@ -248,6 +248,11 @@ function useDebounce<T extends unknown[]>(
   delay: number,
 ) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fnRef = useRef(fn);
+
+  useEffect(() => {
+    fnRef.current = fn;
+  }, [fn]);
 
   // Without this, a pending timer from a component that has since unmounted
   // (e.g. the user navigated back to the dashboard) keeps ticking in the
@@ -264,9 +269,9 @@ function useDebounce<T extends unknown[]>(
   return useCallback(
     (...args: T) => {
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => fn(...args), delay);
+      timer.current = setTimeout(() => fnRef.current(...args), delay);
     },
-    [fn, delay],
+    [delay],
   );
 }
 
@@ -292,6 +297,7 @@ const ExcalidrawCanvas = forwardRef<
   // local cache is correctly treated as still needing a push, instead of
   // silently sitting unsynced until the user happens to make another edit.
   const isDirtyRef = useRef(initialSynced === false);
+  const lastSceneVersionRef = useRef<number>(-1);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const excalidrawApiRef = useRef<any>(null);
   const [backgroundColor, setBackgroundColor] = useState<string>(() =>
@@ -480,13 +486,13 @@ const ExcalidrawCanvas = forwardRef<
   // ── Debounced handlers ─────────────────────────────────────────────────────
   const debouncedLocalSave = useDebounce(
     async (sceneData: object) => {
-      // This only ever fires from handleChange, which sets isDirtyRef.current
-      // = true right before scheduling it — so the content saved here is
-      // always still-unconfirmed-by-the-server, hence synced: false.
-      await saveLocal(diagramId, sceneData, serverVersionRef.current, undefined, false);
-      // Mark as locally saved immediately — server sync happens separately
-      // on a longer debounce. This prevents "Saving…" from lingering for 10s.
-      setSyncState("saved");
+      try {
+        await saveLocal(diagramId, sceneData, serverVersionRef.current, undefined, false);
+        setSyncState("saved");
+      } catch (err) {
+        console.error("Local save failed", err);
+        setSyncState("offline");
+      }
     },
     1000, // 1s debounce for IDB
   );
@@ -610,6 +616,13 @@ const ExcalidrawCanvas = forwardRef<
         excalidrawApiRef.current.updateScene({ elements: updatedElements });
         return; // Let the next onChange pass through for saving
       }
+
+      const currentSceneVersion = elements.reduce((acc, el) => acc + el.version, 0) + elements.length;
+      if (lastSceneVersionRef.current === currentSceneVersion) {
+        // Just pointer movement, selection change, or appState update — no real content change.
+        return;
+      }
+      lastSceneVersionRef.current = currentSceneVersion;
 
       const sceneData = {
         elements,
