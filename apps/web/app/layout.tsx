@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Diagram Studio",
+  title: "Arc Draw",
   description:
     "A personal infinite-canvas diagramming tool for architecture diagrams and system design.",
 };

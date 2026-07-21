@@ -44,11 +44,9 @@ export default function RegisterPage() {
     <div className="w-full max-w-md">
       {/* Logo */}
       <div className="flex items-center gap-3 mb-8 justify-center">
-        <div className="w-10 h-10 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center glow-primary">
-          <Layers className="w-5 h-5 text-primary" />
-        </div>
+        <img src="/logo.png" alt="Arc Draw" className="w-10 h-10 rounded-xl object-contain glow-primary" />
         <span className="text-xl font-semibold tracking-tight gradient-text">
-          Diagram Studio
+          Arc Draw
         </span>
       </div>
 
