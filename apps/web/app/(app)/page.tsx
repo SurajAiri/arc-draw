@@ -12,6 +12,9 @@ interface DiagramMeta {
   version: number;
 }
 
+import LogoutButton from "@/components/dashboard/LogoutButton";
+import Link from "next/link";
+
 export default function DashboardPage() {
   const router = useRouter();
   const [diagrams, setDiagrams] = useState<DiagramMeta[]>([]);
@@ -86,9 +89,26 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-10">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+    <div className="flex flex-col min-h-screen">
+      {/* Top nav */}
+      <header className="h-14 border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-40 flex items-center px-6">
+        <Link href="/" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
+          <div className="w-7 h-7 rounded-lg bg-primary/20 border border-primary/30 flex items-center justify-center">
+            <Layers className="w-3.5 h-3.5 text-primary" />
+          </div>
+          <span className="font-semibold text-sm tracking-tight gradient-text">
+            Diagram Studio
+          </span>
+        </Link>
+
+        <div className="ml-auto">
+          <LogoutButton />
+        </div>
+      </header>
+      
+      <div className="max-w-7xl mx-auto px-6 py-10 w-full">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-semibold text-foreground flex items-center gap-2.5">
             <LayoutGrid className="w-6 h-6 text-primary" />
@@ -177,6 +197,7 @@ export default function DashboardPage() {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }
