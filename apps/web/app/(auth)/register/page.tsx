@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Loader2, Mail, Lock, Layers } from "lucide-react";
+import { Loader2, Mail, Lock } from "lucide-react";
+import BrandMark from "@/components/marketing/BrandMark";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -43,11 +44,8 @@ export default function RegisterPage() {
   return (
     <div className="w-full max-w-md">
       {/* Logo */}
-      <div className="flex items-center gap-3 mb-8 justify-center">
-        <img src="/logo.png" alt="Arc Draw" className="w-10 h-10 rounded-xl object-contain glow-primary" />
-        <span className="text-xl font-semibold tracking-tight gradient-text">
-          Arc Draw
-        </span>
+      <div className="mb-8 flex justify-center">
+        <BrandMark href="/" size="lg" priority />
       </div>
 
       {/* Card */}

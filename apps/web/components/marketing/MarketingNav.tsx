@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Menu, X } from "lucide-react";
+import BrandMark from "@/components/marketing/BrandMark";
 
 const links = [
   { href: "#features", label: "Features" },
@@ -28,14 +29,11 @@ export default function MarketingNav({ isAuthenticated = false }: MarketingNavPr
   return (
     <header
       className={`fixed top-0 inset-x-0 z-50 transition-all duration-300 ${
-        scrolled ? "bg-background/80 backdrop-blur-md border-b border-border" : "bg-transparent border-b border-transparent"
+        scrolled ? "bg-background/85 backdrop-blur-md border-b border-border" : "bg-transparent border-b border-transparent"
       }`}
     >
       <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
-          <img src="/logo.png" alt="Arc Draw" className="w-7 h-7 rounded-lg object-contain" />
-          <span className="font-semibold text-sm tracking-tight gradient-text">Arc Draw</span>
-        </Link>
+        <BrandMark priority />
 
         <nav className="hidden md:flex items-center gap-8">
           {links.map((link) => (
@@ -53,7 +51,7 @@ export default function MarketingNav({ isAuthenticated = false }: MarketingNavPr
           {isAuthenticated ? (
             <Link
               href="/dashboard"
-              className="group flex items-center gap-1.5 text-sm font-medium bg-primary text-primary-foreground px-4 py-2 rounded-xl hover:bg-primary/90 transition-all glow-primary"
+              className="group flex items-center gap-1.5 text-sm font-medium bg-primary text-primary-foreground px-4 py-2 rounded-xl hover:bg-primary/90 transition-all"
             >
               Go to dashboard
               <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
@@ -68,7 +66,7 @@ export default function MarketingNav({ isAuthenticated = false }: MarketingNavPr
               </Link>
               <Link
                 href="/register"
-                className="group flex items-center gap-1.5 text-sm font-medium bg-primary text-primary-foreground px-4 py-2 rounded-xl hover:bg-primary/90 transition-all glow-primary"
+                className="group flex items-center gap-1.5 text-sm font-medium bg-primary text-primary-foreground px-4 py-2 rounded-xl hover:bg-primary/90 transition-all"
               >
                 Get started
                 <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />

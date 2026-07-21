@@ -14,7 +14,7 @@ interface DiagramMeta {
 }
 
 import LogoutButton from "@/components/dashboard/LogoutButton";
-import Link from "next/link";
+import BrandMark from "@/components/marketing/BrandMark";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -95,12 +95,7 @@ export default function DashboardPage() {
     <div className="flex flex-col min-h-screen">
       {/* Top nav */}
       <header className="h-14 border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-40 flex items-center px-6">
-        <Link href="/dashboard" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
-          <img src="/logo.png" alt="Arc Draw" className="w-7 h-7 rounded-lg object-contain" />
-          <span className="font-semibold text-sm tracking-tight gradient-text">
-            Arc Draw
-          </span>
-        </Link>
+        <BrandMark href="/" priority />
 
         <div className="ml-auto">
           <LogoutButton />
