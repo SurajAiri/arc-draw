@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -77,10 +78,14 @@ const steps = [
   },
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const cookieStore = await cookies();
+  const isAuthenticated =
+    cookieStore.has("access_token") || cookieStore.has("refresh_token");
+
   return (
     <div className="min-h-screen overflow-x-hidden">
-      <MarketingNav />
+      <MarketingNav isAuthenticated={isAuthenticated} />
 
       {/* ---------------- Hero ---------------- */}
       <section className="relative pt-40 pb-28 px-6">
@@ -123,10 +128,10 @@ export default function LandingPage() {
             style={{ animationDelay: "240ms" }}
           >
             <Link
-              href="/register"
+              href={isAuthenticated ? "/dashboard" : "/register"}
               className="group w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-all glow-primary"
             >
-              Start diagramming free
+              {isAuthenticated ? "Go to dashboard" : "Start diagramming free"}
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
             </Link>
             <a
@@ -291,16 +296,20 @@ export default function LandingPage() {
             aria-hidden
           />
           <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight mb-4 relative">
-            Ready to sketch your next system?
+            {isAuthenticated
+              ? "Pick up right where you left off"
+              : "Ready to sketch your next system?"}
           </h2>
           <p className="text-muted-foreground mb-8 relative">
-            Free to use, no credit card, offline from the first click.
+            {isAuthenticated
+              ? "Your diagrams are waiting in your dashboard."
+              : "Free to use, no credit card, offline from the first click."}
           </p>
           <Link
-            href="/register"
+            href={isAuthenticated ? "/dashboard" : "/register"}
             className="group relative inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-all glow-primary"
           >
-            Create your workspace
+            {isAuthenticated ? "Go to dashboard" : "Create your workspace"}
             <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
         </Reveal>

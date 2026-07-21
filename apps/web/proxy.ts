@@ -17,8 +17,16 @@ export function proxy(request: NextRequest) {
 
   const hasAccessToken = request.cookies.has("access_token");
   const hasRefreshToken = request.cookies.has("refresh_token");
+  const isAuthenticated = hasAccessToken || hasRefreshToken;
 
-  if (!isPublicPath && !hasAccessToken && !hasRefreshToken) {
+  const isAuthPage = pathname.startsWith("/login") || pathname.startsWith("/register");
+
+  // Already signed in? Don't show login/register again — go straight to the dashboard.
+  if (isAuthPage && isAuthenticated) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  if (!isPublicPath && !isAuthenticated) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("from", pathname);
     return NextResponse.redirect(loginUrl);

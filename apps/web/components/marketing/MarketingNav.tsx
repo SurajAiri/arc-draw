@@ -10,7 +10,11 @@ const links = [
   { href: "#preview", label: "Preview" },
 ];
 
-export default function MarketingNav() {
+interface MarketingNavProps {
+  isAuthenticated?: boolean;
+}
+
+export default function MarketingNav({ isAuthenticated = false }: MarketingNavProps) {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -46,19 +50,31 @@ export default function MarketingNav() {
         </nav>
 
         <div className="hidden md:flex items-center gap-3">
-          <Link
-            href="/login"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-2"
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/register"
-            className="group flex items-center gap-1.5 text-sm font-medium bg-primary text-primary-foreground px-4 py-2 rounded-xl hover:bg-primary/90 transition-all glow-primary"
-          >
-            Get started
-            <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
-          </Link>
+          {isAuthenticated ? (
+            <Link
+              href="/dashboard"
+              className="group flex items-center gap-1.5 text-sm font-medium bg-primary text-primary-foreground px-4 py-2 rounded-xl hover:bg-primary/90 transition-all glow-primary"
+            >
+              Go to dashboard
+              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+            </Link>
+          ) : (
+            <>
+              <Link
+                href="/login"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-2"
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/register"
+                className="group flex items-center gap-1.5 text-sm font-medium bg-primary text-primary-foreground px-4 py-2 rounded-xl hover:bg-primary/90 transition-all glow-primary"
+              >
+                Get started
+                <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            </>
+          )}
         </div>
 
         <button
@@ -83,18 +99,29 @@ export default function MarketingNav() {
             </a>
           ))}
           <div className="flex items-center gap-3 pt-2 border-t border-border">
-            <Link
-              href="/login"
-              className="flex-1 text-center text-sm font-medium text-foreground border border-border rounded-xl px-4 py-2.5"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/register"
-              className="flex-1 text-center text-sm font-medium bg-primary text-primary-foreground rounded-xl px-4 py-2.5"
-            >
-              Get started
-            </Link>
+            {isAuthenticated ? (
+              <Link
+                href="/dashboard"
+                className="flex-1 text-center text-sm font-medium bg-primary text-primary-foreground rounded-xl px-4 py-2.5"
+              >
+                Go to dashboard
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="flex-1 text-center text-sm font-medium text-foreground border border-border rounded-xl px-4 py-2.5"
+                >
+                  Sign in
+                </Link>
+                <Link
+                  href="/register"
+                  className="flex-1 text-center text-sm font-medium bg-primary text-primary-foreground rounded-xl px-4 py-2.5"
+                >
+                  Get started
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}
