@@ -1,5 +1,5 @@
 "use client";
-
+import "@excalidraw/excalidraw/index.css";
 import dynamic from "next/dynamic";
 import {
   forwardRef,
@@ -21,8 +21,9 @@ type BinaryFiles = any;
 // Dynamically import Excalidraw — it's browser-only (no SSR)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Excalidraw = dynamic<any>(
-  () => import("@excalidraw/excalidraw").then((m) => ({ default: m.Excalidraw })),
-  { ssr: false, loading: () => <CanvasLoading /> }
+  () =>
+    import("@excalidraw/excalidraw").then((m) => ({ default: m.Excalidraw })),
+  { ssr: false, loading: () => <CanvasLoading /> },
 );
 
 function CanvasLoading() {
@@ -54,7 +55,7 @@ export interface ExcalidrawCanvasHandle {
 // Debounce helper
 function useDebounce<T extends unknown[]>(
   fn: (...args: T) => void,
-  delay: number
+  delay: number,
 ) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   return useCallback(
@@ -62,21 +63,23 @@ function useDebounce<T extends unknown[]>(
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => fn(...args), delay);
     },
-    [fn, delay]
+    [fn, delay],
   );
 }
 
-const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProps>(
-  function ExcalidrawCanvas(
-    {
-      diagramId,
-      initialSceneData,
-      initialVersion,
-      onSyncStateChange,
-      onConflict,
-    },
-    ref
-  ) {
+const ExcalidrawCanvas = forwardRef<
+  ExcalidrawCanvasHandle,
+  ExcalidrawCanvasProps
+>(function ExcalidrawCanvas(
+  {
+    diagramId,
+    initialSceneData,
+    initialVersion,
+    onSyncStateChange,
+    onConflict,
+  },
+  ref,
+) {
   // Track the server version we last successfully synced
   const serverVersionRef = useRef<number>(initialVersion);
   const sceneDataRef = useRef<object>(initialSceneData);
@@ -85,7 +88,7 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
 
   const setSyncState = useCallback(
     (state: SyncState) => onSyncStateChange?.(state),
-    [onSyncStateChange]
+    [onSyncStateChange],
   );
 
   // ── Sync to server ─────────────────────────────────────────────────────────
@@ -124,7 +127,7 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
         setSyncState("offline");
       }
     },
-    [diagramId, onConflict, setSyncState]
+    [diagramId, onConflict, setSyncState],
   );
 
   // ── Debounced handlers ─────────────────────────────────────────────────────
@@ -132,14 +135,14 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
     async (sceneData: object) => {
       await saveLocal(diagramId, sceneData, serverVersionRef.current);
     },
-    1000 // 1s debounce for IDB
+    1000, // 1s debounce for IDB
   );
 
   const debouncedServerSync = useDebounce(
     async (sceneData: object) => {
       await syncToServer(sceneData, false);
     },
-    10000 // 10s idle debounce for server, per PRD §8
+    10000, // 10s idle debounce for server, per PRD §8
   );
 
   const initialMountRef = useRef(true);
@@ -149,13 +152,13 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
     (
       elements: readonly ExcalidrawElement[],
       _appState: AppState,
-      _files: BinaryFiles
+      _files: BinaryFiles,
     ) => {
       if (initialMountRef.current) {
         initialMountRef.current = false;
         return;
       }
-      
+
       const sceneData = {
         elements,
         // We don't persist appState to avoid locking viewport across sessions
@@ -165,7 +168,7 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
       debouncedLocalSave(sceneData);
       debouncedServerSync(sceneData);
     },
-    [debouncedLocalSave, debouncedServerSync, setSyncState]
+    [debouncedLocalSave, debouncedServerSync, setSyncState],
   );
 
   // ── Imperative handle for conflict-modal resolution ─────────────────────────
@@ -189,12 +192,13 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
         sceneDataRef.current = data.sceneData;
         await clearLocal(diagramId);
         const elements =
-          (data.sceneData as { elements?: ExcalidrawElement[] })?.elements ?? [];
+          (data.sceneData as { elements?: ExcalidrawElement[] })?.elements ??
+          [];
         excalidrawApiRef.current?.updateScene({ elements });
         setSyncState("saved");
       },
     }),
-    [diagramId, syncToServer, setSyncState]
+    [diagramId, syncToServer, setSyncState],
   );
 
   // ── Force-flush on tab hide / page unload ──────────────────────────────────
@@ -212,7 +216,7 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
               force: false,
             }),
           ],
-          { type: "application/json" }
+          { type: "application/json" },
         );
         navigator.sendBeacon(`/api/diagrams/${diagramId}`, blob);
       }
@@ -243,7 +247,9 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
   useEffect(() => {
     loadLocal(diagramId).then((local) => {
       if (local && local.sceneData) {
-        const localScene = local.sceneData as { elements?: ExcalidrawElement[] };
+        const localScene = local.sceneData as {
+          elements?: ExcalidrawElement[];
+        };
         setInitialData((prev) => ({
           ...prev,
           elements: localScene.elements ?? [],
@@ -269,7 +275,6 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
       />
     </div>
   );
-  }
-);
+});
 
 export default ExcalidrawCanvas;
