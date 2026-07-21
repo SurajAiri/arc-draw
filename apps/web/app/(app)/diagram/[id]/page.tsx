@@ -9,6 +9,7 @@ import ExcalidrawCanvas, {
 } from "@/components/canvas/ExcalidrawCanvas";
 import SyncStatus, { type SyncState } from "@/components/canvas/SyncStatus";
 import ConflictModal from "@/components/canvas/ConflictModal";
+import { loadLocal, saveLocal } from "@/lib/idb";
 
 interface DiagramData {
   id: string;
@@ -39,27 +40,74 @@ export default function DiagramEditorPage({ params }: DiagramEditorProps) {
     params.then(({ id }) => setDiagramId(id));
   }, [params]);
 
-  // Fetch diagram from server
+  // Load diagram — local cache first (instant paint, no network wait),
+  // server fetch happens in the background to refresh title/version and
+  // to cover the case where there's no local cache yet (new device, etc).
   useEffect(() => {
     if (!diagramId) return;
-    fetch(`/api/diagrams/${diagramId}`)
-      .then((res) => {
+    let cancelled = false;
+
+    async function load() {
+      const local = await loadLocal(diagramId!);
+      if (cancelled) return;
+
+      if (local) {
+        // We have a local copy — paint immediately, don't block on network.
+        setDiagram({
+          id: diagramId!,
+          title: local.title ?? "Untitled Diagram",
+          sceneData: local.sceneData,
+          version: local.version,
+        });
+        setTitleValue(local.title ?? "Untitled Diagram");
+        setLoading(false);
+      }
+
+      // Always reconcile with the server in the background — this is the
+      // source of truth for title/version even when we rendered from cache.
+      try {
+        const res = await fetch(`/api/diagrams/${diagramId}`);
+        if (cancelled) return;
+
         if (res.status === 401) {
           router.push("/login");
-          return null;
+          return;
         }
         if (res.status === 404) {
           setNotFound(true);
-          return null;
+          setLoading(false);
+          return;
         }
-        return res.json();
-      })
-      .then((data: DiagramData | null) => {
-        if (!data) return;
-        setDiagram(data);
-        setTitleValue(data.title);
-      })
-      .finally(() => setLoading(false));
+        if (!res.ok) {
+          // Network/server hiccup — if we already painted from cache, stay
+          // on that; otherwise there's nothing to show.
+          if (!local) setLoading(false);
+          return;
+        }
+
+        const data: DiagramData = await res.json();
+        if (cancelled) return;
+
+        // Only overwrite what's on screen if we didn't already load a local
+        // copy (avoids clobbering newer local edits with a stale server
+        // version — the canvas's own conflict handling covers real edits).
+        if (!local) {
+          setDiagram(data);
+          setTitleValue(data.title);
+        } else {
+          // Keep the title in sync even when scene content came from cache.
+          setDiagram((prev) => (prev ? { ...prev, title: data.title } : prev));
+          setTitleValue((prev) => (prev === local.title ? data.title : prev));
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, [diagramId, router]);
 
   // Focus title input when renaming
@@ -85,6 +133,8 @@ export default function DiagramEditorPage({ params }: DiagramEditorProps) {
     });
     if (res.ok) {
       setDiagram((prev) => (prev ? { ...prev, title: trimmed } : prev));
+      const local = await loadLocal(diagramId);
+      await saveLocal(diagramId, local?.sceneData ?? diagram.sceneData, local?.version ?? diagram.version, trimmed);
     }
   }, [diagram, diagramId, titleValue]);
 
@@ -102,7 +152,7 @@ export default function DiagramEditorPage({ params }: DiagramEditorProps) {
 
   if (loading || !diagramId) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-[#1a1a2e] text-slate-400">
+      <div className="flex-1 flex items-center justify-center bg-black text-slate-400">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-6 h-6 animate-spin" />
           <span className="text-sm">Opening diagram…</span>

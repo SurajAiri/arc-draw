@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { saveLocal, loadLocal, clearLocal } from "@/lib/idb";
+import { saveLocal, clearLocal } from "@/lib/idb";
 import type { SyncState } from "@/components/canvas/SyncStatus";
 // Required — Excalidraw ships its own stylesheet for the toolbar, panels,
 // and icon sizing. Without this import the canvas renders as unstyled raw
@@ -31,13 +31,21 @@ const Excalidraw = dynamic<any>(
 
 // Curated canvas background presets — tuned to match the app's own
 // dark/violet palette rather than Excalidraw's default swatch picker.
+// "Black" leads the list since true-black dark mode is now the default.
 const BACKGROUND_PRESETS: { label: string; value: string }[] = [
+  { label: "Black", value: "#000000" },
   { label: "Midnight", value: "#1a1a2e" },
   { label: "Charcoal", value: "#18181b" },
   { label: "Slate", value: "#1e293b" },
   { label: "Paper", value: "#f5f3ee" },
   { label: "Graphite", value: "#0f0f14" },
 ];
+
+// Guide-only dotted grid: this is Excalidraw's built-in grid overlay, drawn
+// on top of the canvas purely as a drawing aid. It is NOT a scene element,
+// so it never appears in exports (PNG/SVG), never gets selected, and never
+// gets saved/synced with the diagram.
+const GRID_SIZE = 20;
 
 // A handful of custom shortcuts layered on top of Excalidraw's own.
 // Intercepted in the capture phase so they take priority; every other
@@ -55,7 +63,7 @@ const SHORTCUT_HINTS: { keys: string; label: string }[] = [
 
 function CanvasLoading() {
   return (
-    <div className="flex-1 flex items-center justify-center bg-[#1a1a2e]">
+    <div className="flex-1 flex items-center justify-center bg-black">
       <div className="flex flex-col items-center gap-3 text-slate-400">
         <div className="w-8 h-8 border-2 border-slate-600 border-t-violet-500 rounded-full animate-spin" />
         <span className="text-sm">Loading canvas…</span>
@@ -121,6 +129,13 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
   );
 
   // ── Sync to server ─────────────────────────────────────────────────────────
+  // Uses a ref-to-latest-function pattern so the retry-after-refresh branch
+  // can call the current version of syncToServer without a stale/TDZ
+  // self-reference inside its own useCallback body.
+  const syncToServerRef = useRef<(sceneData: object, force?: boolean) => Promise<void>>(
+    async () => {}
+  );
+
   const syncToServer = useCallback(
     async (sceneData: object, force = false) => {
       setSyncState("syncing");
@@ -147,10 +162,16 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
           serverVersionRef.current = data.version;
           setSyncState("saved");
         } else if (res.status === 401) {
-          // Token expired — try refresh
-          await fetch("/api/auth/refresh", { method: "POST" });
-          // Retry once
-          await syncToServer(sceneData, force);
+          // Token expired — try refresh, then retry once (only if the
+          // refresh itself succeeded, otherwise we'd just 401 again).
+          const refreshRes = await fetch("/api/auth/refresh", { method: "POST" });
+          if (refreshRes.ok) {
+            await syncToServerRef.current(sceneData, force);
+          } else {
+            setSyncState("offline");
+          }
+        } else {
+          setSyncState("offline");
         }
       } catch {
         setSyncState("offline");
@@ -158,6 +179,10 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
     },
     [diagramId, onConflict, setSyncState]
   );
+
+  useEffect(() => {
+    syncToServerRef.current = syncToServer;
+  }, [syncToServer]);
 
   // ── Debounced handlers ─────────────────────────────────────────────────────
   const debouncedLocalSave = useDebounce(
@@ -259,30 +284,25 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
     };
   }, [diagramId]);
 
-  // ── Initial scene — prefer IDB (faster), fall back to server data ──────────
-  const [initialData, setInitialData] = useState<{
+  // ── Initial scene ────────────────────────────────────────────────────────
+  // The page component has already resolved local-vs-server and picked the
+  // right sceneData/version before this component is mounted, so this only
+  // needs to be computed once (lazy initializer) for Excalidraw's
+  // initialData prop, which it reads only on mount.
+  const [initialData] = useState<{
     elements: ExcalidrawElement[];
     appState: Partial<AppState>;
-  }>({
+  }>(() => ({
     elements:
       (initialSceneData as { elements?: ExcalidrawElement[] }).elements ?? [],
     appState: {
       viewBackgroundColor: BACKGROUND_PRESETS[0].value,
       theme: "dark",
+      gridModeEnabled: true,
+      gridSize: GRID_SIZE,
+      currentItemStrokeColor: "#ffffff",
     },
-  });
-
-  useEffect(() => {
-    loadLocal(diagramId).then((local) => {
-      if (local && local.sceneData) {
-        const localScene = local.sceneData as { elements?: ExcalidrawElement[] };
-        setInitialData((prev) => ({
-          ...prev,
-          elements: localScene.elements ?? [],
-        }));
-      }
-    });
-  }, [diagramId]);
+  }));
 
   // ── Custom canvas background color ──────────────────────────────────────────
   const applyBackground = useCallback((color: string) => {
@@ -343,7 +363,7 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
       onKeyDownCapture={handleKeyDownCapture}
     >
       <Excalidraw
-        excalidrawAPI={(api) => {
+        excalidrawAPI={(api: unknown) => {
           excalidrawApiRef.current = api;
         }}
         initialData={initialData}

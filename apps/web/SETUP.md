@@ -16,9 +16,12 @@ npm install
 docker compose up -d
 ```
 
-This starts Postgres on `5432`, MinIO on `9000` (S3 API) and `9001` (web
-console at http://localhost:9001, login `minio` / `minio123`), and creates
-the `diagrams` bucket automatically.
+This starts Postgres on host port `5433` (mapped to `5432` in the container,
+db `myapp`), MinIO on `9000` (S3 API) and `9001` (web console at
+http://localhost:9001, login `minioadmin` / `minioadmin`), and creates the
+`diagrams` bucket automatically. Redis isn't used by the app — the current
+save path is IndexedDB (instant, offline-friendly local cache) syncing
+straight to Postgres, so there's nothing for Redis to sit in front of yet.
 
 ## 3. Environment variables
 

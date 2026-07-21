@@ -9,6 +9,7 @@ export interface LocalDiagram {
   id: string;
   sceneData: object;
   version: number;
+  title?: string;
   savedAt: number; // Date.now()
 }
 
@@ -31,16 +32,28 @@ function openDB(): Promise<IDBDatabase> {
 export async function saveLocal(
   id: string,
   sceneData: object,
-  version: number
+  version: number,
+  title?: string
 ): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
     const store = tx.objectStore(STORE_NAME);
-    const record: LocalDiagram = { id, sceneData, version, savedAt: Date.now() };
-    const req = store.put(record);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
+    const getReq = store.get(id);
+    getReq.onsuccess = () => {
+      const existing = getReq.result as LocalDiagram | undefined;
+      const record: LocalDiagram = {
+        id,
+        sceneData,
+        version,
+        title: title ?? existing?.title,
+        savedAt: Date.now(),
+      };
+      const putReq = store.put(record);
+      putReq.onsuccess = () => resolve();
+      putReq.onerror = () => reject(putReq.error);
+    };
+    getReq.onerror = () => reject(getReq.error);
   });
 }
 
