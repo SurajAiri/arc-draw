@@ -31,8 +31,11 @@ const Excalidraw = dynamic<any>(
 
 // Curated canvas background presets — tuned to match the app's own
 // dark/violet palette rather than Excalidraw's default swatch picker.
-// "Black" leads the list since true-black dark mode is now the default.
+// "Transparent" leads the list as the default — lets Excalidraw's own
+// dark theme control the canvas surface so shapes render with white
+// strokes on the correct dark ground without color-clash issues.
 const BACKGROUND_PRESETS: { label: string; value: string }[] = [
+  { label: "Auto", value: "transparent" },
   { label: "Black", value: "#000000" },
   { label: "Midnight", value: "#1a1a2e" },
   { label: "Charcoal", value: "#18181b" },
@@ -40,6 +43,17 @@ const BACKGROUND_PRESETS: { label: string; value: string }[] = [
   { label: "Paper", value: "#f5f3ee" },
   { label: "Graphite", value: "#0f0f14" },
 ];
+
+const BG_PREF_KEY = "excalidraw-bg-pref";
+
+function loadBgPref(): string {
+  if (typeof window === "undefined") return BACKGROUND_PRESETS[0].value;
+  return localStorage.getItem(BG_PREF_KEY) ?? BACKGROUND_PRESETS[0].value;
+}
+
+function saveBgPref(color: string) {
+  localStorage.setItem(BG_PREF_KEY, color);
+}
 
 // Guide-only dotted grid: this is Excalidraw's built-in grid overlay, drawn
 // on top of the canvas purely as a drawing aid. It is NOT a scene element,
@@ -118,8 +132,8 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
   const sceneDataRef = useRef<object>(initialSceneData);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const excalidrawApiRef = useRef<any>(null);
-  const [backgroundColor, setBackgroundColor] = useState(
-    BACKGROUND_PRESETS[0].value
+  const [backgroundColor, setBackgroundColor] = useState<string>(
+    () => loadBgPref()
   );
   const [showShortcuts, setShowShortcuts] = useState(false);
 
@@ -188,6 +202,9 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
   const debouncedLocalSave = useDebounce(
     async (sceneData: object) => {
       await saveLocal(diagramId, sceneData, serverVersionRef.current);
+      // Mark as locally saved immediately — server sync happens separately
+      // on a longer debounce. This prevents "Saving…" from lingering for 10s.
+      setSyncState("saved");
     },
     1000 // 1s debounce for IDB
   );
@@ -212,12 +229,14 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
         initialMountRef.current = false;
         return;
       }
-      
+
       const sceneData = {
         elements,
         // We don't persist appState to avoid locking viewport across sessions
       };
       sceneDataRef.current = sceneData;
+      // Show "Saving…" only briefly — debouncedLocalSave will resolve it
+      // to "Saved" once IDB write completes (~1 s), not after 10 s.
       setSyncState("saving");
       debouncedLocalSave(sceneData);
       debouncedServerSync(sceneData);
@@ -292,21 +311,26 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
   const [initialData] = useState<{
     elements: ExcalidrawElement[];
     appState: Partial<AppState>;
-  }>(() => ({
-    elements:
-      (initialSceneData as { elements?: ExcalidrawElement[] }).elements ?? [],
-    appState: {
-      viewBackgroundColor: BACKGROUND_PRESETS[0].value,
-      theme: "dark",
-      gridModeEnabled: true,
-      gridSize: GRID_SIZE,
-      currentItemStrokeColor: "#ffffff",
-    },
-  }));
+  }>(() => {
+    const savedBg = loadBgPref();
+    return {
+      elements:
+        (initialSceneData as { elements?: ExcalidrawElement[] }).elements ?? [],
+      appState: {
+        // Use the user's saved preference; "transparent" defers to Excalidraw's
+        // own dark-theme canvas color so white-stroke shapes look correct.
+        viewBackgroundColor: savedBg,
+        theme: "dark",
+        gridModeEnabled: true,
+        gridSize: GRID_SIZE,
+      },
+    };
+  });
 
   // ── Custom canvas background color ──────────────────────────────────────────
   const applyBackground = useCallback((color: string) => {
     setBackgroundColor(color);
+    saveBgPref(color); // persist preference across sessions
     excalidrawApiRef.current?.updateScene({ appState: { viewBackgroundColor: color } });
   }, []);
 
@@ -383,11 +407,15 @@ const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProp
               <button
                 key={preset.value}
                 type="button"
-                title={`${preset.label} (${preset.value})`}
+                title={`${preset.label}${preset.value !== "transparent" ? ` (${preset.value})` : " – use Excalidraw dark theme default"}`}
                 onClick={() => applyBackground(preset.value)}
-                className="w-5 h-5 rounded-md border transition-transform hover:scale-110"
+                className="w-5 h-5 rounded-md border transition-transform hover:scale-110 relative overflow-hidden"
                 style={{
-                  background: preset.value,
+                  // Checkerboard for the transparent/Auto preset
+                  background:
+                    preset.value === "transparent"
+                      ? "repeating-conic-gradient(#555 0% 25%, #222 0% 50%) 0 0 / 8px 8px"
+                      : preset.value,
                   borderColor:
                     backgroundColor === preset.value
                       ? "var(--primary)"

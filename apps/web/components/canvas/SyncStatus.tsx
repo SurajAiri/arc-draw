@@ -19,7 +19,7 @@ const stateConfig: Record<
   },
   saving: {
     icon: Loader2,
-    label: "Saving…",
+    label: "Saving locally…",
     className: "text-muted-foreground",
   },
   syncing: {
