@@ -4,6 +4,8 @@ import { requireAuth } from "@/lib/auth/middleware";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
+const uuidSchema = z.string().uuid();
+
 // GET /api/diagrams/[id] — fetch a single diagram with scene data
 export async function GET(
   _request: Request,
@@ -13,6 +15,9 @@ export async function GET(
   if (auth.error) return auth.error;
 
   const { id } = await params;
+  if (!uuidSchema.safeParse(id).success) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
 
   const [diagram] = await db
     .select()
@@ -49,6 +54,9 @@ export async function PATCH(
   if (auth.error) return auth.error;
 
   const { id } = await params;
+  if (!uuidSchema.safeParse(id).success) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
 
   let body: unknown;
   try {
@@ -126,6 +134,9 @@ export async function DELETE(
   if (auth.error) return auth.error;
 
   const { id } = await params;
+  if (!uuidSchema.safeParse(id).success) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
 
   const [deleted] = await db
     .delete(diagrams)

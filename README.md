@@ -1,159 +1,84 @@
-# Turborepo starter
+# Arc Draw
 
-This Turborepo starter is maintained by the Turborepo core team.
+Arc Draw is a modern, local-first diagramming and whiteboarding application built for speed and reliability. Powered by Excalidraw's infinite canvas and a robust offline-capable sync engine, it allows you to capture ideas instantly—whether you're online or offline.
 
-## Using this example
+## Features
 
-Run the following command:
+- **Infinite Canvas:** Built on top of [Excalidraw](https://excalidraw.com/), providing a smooth, hand-drawn aesthetic and powerful vector drawing capabilities.
+- **Local-First Architecture:** Edits are instantly saved to your browser's IndexedDB. You can start drawing immediately, with zero network blocking.
+- **Background Syncing:** Changes are seamlessly synced to the cloud in the background. If you go offline, your edits are safely stored locally and pushed to the server automatically when connectivity is restored.
+- **Conflict Resolution:** Built-in safeguards ensure that offline edits don't silently overwrite newer server changes.
+- **Custom Icon Support:** Deep integration with Lucide and Iconify, allowing you to search, stamp, and dynamically recolor thousands of icons directly on the canvas.
+- **Sleek Monochrome UI:** A beautiful, distraction-free dark-mode-first design system built with Tailwind CSS v4 and Shadcn UI.
+- **Secure Authentication:** JWT-based authentication with Argon2 password hashing.
 
-```sh
-npx create-turbo@latest
-```
+## Screenshots
 
-## What's inside?
+<div align="center">
+  <img src="./screenshots/img-1.jpg" alt="Editor Canvas" width="800"/>
+  <br/><br/>
+  <img src="./screenshots/img-2.jpg" alt="Editor Canvas" width="800"/>
+  <br/><br/>
+  <img src="./screenshots/img-3.jpg" alt="Monochrome UI Interface" width="800"/>
+</div>
 
-This Turborepo includes the following packages/apps:
+## Tech Stack
 
-### Apps and Packages
+- **Framework:** [Next.js](https://nextjs.org/) (App Router, v16)
+- **Monorepo:** [Turborepo](https://turbo.build/repo)
+- **Database:** PostgreSQL (managed with [Drizzle ORM](https://orm.drizzle.team/))
+- **Styling:** [Tailwind CSS v4](https://tailwindcss.com/) + [Shadcn UI](https://ui.shadcn.com/)
+- **Storage:** AWS S3 (for assets and exports)
+- **State & Caching:** IndexedDB (via custom `idb.ts` wrapper), Zustand
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+## Getting Started
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+### Prerequisites
 
-### Utilities
+- Node.js (v20+)
+- [pnpm](https://pnpm.io/) package manager
+- A running PostgreSQL database instance
 
-This Turborepo has some additional tools already setup for you:
+### Installation
 
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
+1. Clone the repository:
 
-### Build
+   ```sh
+   git clone https://github.com/SurajAiri/arc-draw.git
+   cd arc-draw
+   ```
 
-To build all apps and packages, run the following command:
+2. Install dependencies:
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+   ```sh
+   pnpm install
+   ```
 
-```sh
-cd my-turborepo
-turbo build
-```
+3. Set up environment variables:
+   Copy `.env.example` to `.env` in the `apps/web` directory and fill in your database credentials and JWT secrets.
 
-Without global `turbo`, use your package manager:
+4. Run database migrations:
+   ```sh
+   cd apps/web
+   pnpm drizzle-kit push
+   ```
 
-```sh
-cd my-turborepo
-npx turbo build
-pnpm dlx turbo build
-pnpm exec turbo build
-```
+### Development
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo build --filter=docs
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-```
-
-### Develop
-
-To develop all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+To start the development server for all apps in the monorepo:
 
 ```sh
-cd my-turborepo
-turbo dev
+pnpm run dev
 ```
 
-Without global `turbo`, use your package manager:
+The Arc Draw web application will be available at `http://localhost:3000`.
 
-```sh
-cd my-turborepo
-npx turbo dev
-pnpm exec turbo dev
-pnpm exec turbo dev
-```
+## Architecture Overview
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+- **`apps/web`:** The primary Next.js application containing the dashboard, authentication flow, and the diagram editor.
+- **`components/canvas/ExcalidrawCanvas.tsx`:** The core wrapper around the Excalidraw library. Handles the local-first save debounce, SVG icon rendering, and background server syncing.
+- **`lib/idb/index.ts`:** A lightweight IndexedDB wrapper that manages the local cache of diagrams and their sync states.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+## License
 
-```sh
-turbo dev --filter=web
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-pnpm exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-pnpm exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+This project is proprietary and confidential.
