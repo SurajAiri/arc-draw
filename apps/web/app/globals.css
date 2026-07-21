@@ -180,3 +180,34 @@
 .excalidraw img {
   max-width: none;
 }
+
+/*
+ * Excalidraw re-skin — maps the app's own violet/navy tokens onto
+ * Excalidraw's documented theming variables (toolbar, panels, buttons).
+ * Scoped under .dstudio-canvas for specificity per Excalidraw's docs:
+ * https://docs.excalidraw.com/docs/@excalidraw/excalidraw/customizing-styles
+ * Canvas *content* colors (strokes/fills the user draws with) are left
+ * alone — only chrome (toolbar, panels, popovers, selection accent) is
+ * re-themed here.
+ */
+.dstudio-canvas .excalidraw.theme--dark {
+  --color-primary: oklch(0.65 0.22 285);
+  --color-primary-darker: oklch(0.58 0.22 285);
+  --color-primary-darkest: oklch(0.5 0.22 285);
+  --color-primary-light: oklch(0.3 0.08 285);
+  --color-primary-hover: oklch(0.7 0.22 285);
+  --color-primary-contrast-offset: oklch(0.58 0.22 285);
+
+  --island-bg-color: oklch(0.16 0.02 265);
+  --popup-bg-color: oklch(0.16 0.02 265);
+  --button-gray-1: oklch(0.2 0.02 265);
+  --button-gray-2: oklch(0.19 0.02 265);
+  --input-border-color: oklch(0.26 0.025 265);
+  --default-border-color: oklch(0.26 0.025 265);
+
+  --border-radius-md: 0.625rem;
+  --border-radius-lg: 0.875rem;
+
+  --focus-highlight-color: oklch(0.65 0.22 285);
+  --link-color: oklch(0.65 0.22 285);
+}
