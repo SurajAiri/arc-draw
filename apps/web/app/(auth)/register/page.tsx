@@ -31,7 +31,7 @@ export default function RegisterPage() {
         return;
       }
 
-      router.push("/");
+      router.push("/dashboard");
       router.refresh();
     } catch {
       setError("Network error. Please try again.");

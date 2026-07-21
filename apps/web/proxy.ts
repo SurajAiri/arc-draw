@@ -8,6 +8,7 @@ export function proxy(request: NextRequest) {
 
   // Skip static files, API auth routes, and Next.js internals
   const isPublicPath =
+    pathname === "/" ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/register") ||
     pathname.startsWith("/api/auth") ||

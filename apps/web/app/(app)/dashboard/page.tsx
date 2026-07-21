@@ -95,7 +95,7 @@ export default function DashboardPage() {
     <div className="flex flex-col min-h-screen">
       {/* Top nav */}
       <header className="h-14 border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-40 flex items-center px-6">
-        <Link href="/" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
+        <Link href="/dashboard" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
           <img src="/logo.png" alt="Arc Draw" className="w-7 h-7 rounded-lg object-contain" />
           <span className="font-semibold text-sm tracking-tight gradient-text">
             Arc Draw
@@ -185,16 +185,21 @@ export default function DashboardPage() {
       ) : (
         // Grid
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {diagrams.map((diagram) => (
-            <DiagramCard
+          {diagrams.map((diagram, i) => (
+            <div
               key={diagram.id}
-              id={diagram.id}
-              title={diagram.title}
-              updatedAt={diagram.updatedAt}
-              onDelete={handleDelete}
-              onDuplicate={handleDuplicate}
-              onRename={handleRename}
-            />
+              className="animate-in fade-in-0 slide-in-from-bottom-4 fill-mode-both duration-500"
+              style={{ animationDelay: `${Math.min(i, 10) * 40}ms` }}
+            >
+              <DiagramCard
+                id={diagram.id}
+                title={diagram.title}
+                updatedAt={diagram.updatedAt}
+                onDelete={handleDelete}
+                onDuplicate={handleDuplicate}
+                onRename={handleRename}
+              />
+            </div>
           ))}
         </div>
       )}

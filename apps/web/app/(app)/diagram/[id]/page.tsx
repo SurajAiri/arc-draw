@@ -179,7 +179,7 @@ export default function DiagramEditorPage({ params }: DiagramEditorProps) {
         <p className="text-muted-foreground text-sm">
           This diagram doesn&apos;t exist or you don&apos;t have access.
         </p>
-        <Link href="/" className="text-primary hover:underline text-sm">
+        <Link href="/dashboard" className="text-primary hover:underline text-sm">
           ← Back to dashboard
         </Link>
       </div>
@@ -192,7 +192,7 @@ export default function DiagramEditorPage({ params }: DiagramEditorProps) {
       <div className="h-12 border-b border-border/50 bg-card/60 backdrop-blur-md flex items-center px-4 gap-3 shrink-0 z-30">
         {/* Back */}
         <Link
-          href="/"
+          href="/dashboard"
           id="back-to-dashboard"
           className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
         >
