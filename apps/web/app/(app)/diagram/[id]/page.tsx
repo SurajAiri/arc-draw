@@ -4,10 +4,11 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, Loader2, Pencil } from "lucide-react";
-import ExcalidrawCanvas from "@/components/canvas/ExcalidrawCanvas";
+import ExcalidrawCanvas, {
+  type ExcalidrawCanvasHandle,
+} from "@/components/canvas/ExcalidrawCanvas";
 import SyncStatus, { type SyncState } from "@/components/canvas/SyncStatus";
 import ConflictModal from "@/components/canvas/ConflictModal";
-import { clearLocal } from "@/lib/idb";
 
 interface DiagramData {
   id: string;
@@ -30,8 +31,7 @@ export default function DiagramEditorPage({ params }: DiagramEditorProps) {
   const [renamingTitle, setRenamingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState("");
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const sceneDataRef = useRef<object>({});
-  const serverVersionRef = useRef<number>(0);
+  const canvasRef = useRef<ExcalidrawCanvasHandle>(null);
   const [diagramId, setDiagramId] = useState<string | null>(null);
 
   // Resolve dynamic params
@@ -58,8 +58,6 @@ export default function DiagramEditorPage({ params }: DiagramEditorProps) {
         if (!data) return;
         setDiagram(data);
         setTitleValue(data.title);
-        sceneDataRef.current = data.sceneData;
-        serverVersionRef.current = data.version;
       })
       .finally(() => setLoading(false));
   }, [diagramId, router]);
@@ -90,42 +88,17 @@ export default function DiagramEditorPage({ params }: DiagramEditorProps) {
     }
   }, [diagram, diagramId, titleValue]);
 
-  // Conflict resolution
+  // Conflict resolution — delegate to the canvas, which owns the live
+  // scene data and server version refs (this page's copies would be stale).
   const handleKeepMine = useCallback(async () => {
-    if (!diagramId) return;
     setShowConflict(false);
-    setSyncState("syncing");
-    const res = await fetch(`/api/diagrams/${diagramId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: "sync",
-        sceneData: sceneDataRef.current,
-        version: serverVersionRef.current,
-        force: true,
-      }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      serverVersionRef.current = data.version;
-      setSyncState("saved");
-    }
-  }, [diagramId]);
+    await canvasRef.current?.keepMine();
+  }, []);
 
   const handleLoadServer = useCallback(async () => {
-    if (!diagramId) return;
     setShowConflict(false);
-    setLoading(true);
-    const res = await fetch(`/api/diagrams/${diagramId}`);
-    if (res.ok) {
-      const data: DiagramData = await res.json();
-      await clearLocal(diagramId);
-      serverVersionRef.current = data.version;
-      setDiagram(data);
-      setSyncState("saved");
-    }
-    setLoading(false);
-  }, [diagramId]);
+    await canvasRef.current?.loadServer();
+  }, []);
 
   if (loading || !diagramId) {
     return (
@@ -205,6 +178,7 @@ export default function DiagramEditorPage({ params }: DiagramEditorProps) {
       {/* Canvas area */}
       {diagram && !loading && (
         <ExcalidrawCanvas
+          ref={canvasRef}
           key={diagram.id} // re-mount on diagram switch
           diagramId={diagramId}
           initialSceneData={diagram.sceneData}

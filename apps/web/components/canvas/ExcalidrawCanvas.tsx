@@ -1,7 +1,14 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import { saveLocal, loadLocal, clearLocal } from "@/lib/idb";
 import type { SyncState } from "@/components/canvas/SyncStatus";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -37,6 +44,13 @@ interface ExcalidrawCanvasProps {
   onConflict?: () => void;
 }
 
+export interface ExcalidrawCanvasHandle {
+  /** Conflict resolution: force-write the current local scene, overwriting the server. */
+  keepMine: () => Promise<void>;
+  /** Conflict resolution: discard local changes and reload the server's scene into the canvas. */
+  loadServer: () => Promise<void>;
+}
+
 // Debounce helper
 function useDebounce<T extends unknown[]>(
   fn: (...args: T) => void,
@@ -52,16 +66,22 @@ function useDebounce<T extends unknown[]>(
   );
 }
 
-export default function ExcalidrawCanvas({
-  diagramId,
-  initialSceneData,
-  initialVersion,
-  onSyncStateChange,
-  onConflict,
-}: ExcalidrawCanvasProps) {
+const ExcalidrawCanvas = forwardRef<ExcalidrawCanvasHandle, ExcalidrawCanvasProps>(
+  function ExcalidrawCanvas(
+    {
+      diagramId,
+      initialSceneData,
+      initialVersion,
+      onSyncStateChange,
+      onConflict,
+    },
+    ref
+  ) {
   // Track the server version we last successfully synced
   const serverVersionRef = useRef<number>(initialVersion);
   const sceneDataRef = useRef<object>(initialSceneData);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const excalidrawApiRef = useRef<any>(null);
 
   const setSyncState = useCallback(
     (state: SyncState) => onSyncStateChange?.(state),
@@ -119,7 +139,7 @@ export default function ExcalidrawCanvas({
     async (sceneData: object) => {
       await syncToServer(sceneData, false);
     },
-    1000 // 1s debounce for server (reduced from 10s)
+    10000 // 10s idle debounce for server, per PRD §8
   );
 
   const initialMountRef = useRef(true);
@@ -146,6 +166,35 @@ export default function ExcalidrawCanvas({
       debouncedServerSync(sceneData);
     },
     [debouncedLocalSave, debouncedServerSync, setSyncState]
+  );
+
+  // ── Imperative handle for conflict-modal resolution ─────────────────────────
+  // Operates on this component's own live refs, unlike the page's stale copies.
+  useImperativeHandle(
+    ref,
+    () => ({
+      keepMine: async () => {
+        setSyncState("syncing");
+        await syncToServer(sceneDataRef.current, true);
+      },
+      loadServer: async () => {
+        setSyncState("syncing");
+        const res = await fetch(`/api/diagrams/${diagramId}`);
+        if (!res.ok) {
+          setSyncState("offline");
+          return;
+        }
+        const data = await res.json();
+        serverVersionRef.current = data.version;
+        sceneDataRef.current = data.sceneData;
+        await clearLocal(diagramId);
+        const elements =
+          (data.sceneData as { elements?: ExcalidrawElement[] })?.elements ?? [];
+        excalidrawApiRef.current?.updateScene({ elements });
+        setSyncState("saved");
+      },
+    }),
+    [diagramId, syncToServer, setSyncState]
   );
 
   // ── Force-flush on tab hide / page unload ──────────────────────────────────
@@ -206,6 +255,9 @@ export default function ExcalidrawCanvas({
   return (
     <div id="excalidraw-wrapper" className="flex-1 h-full">
       <Excalidraw
+        excalidrawAPI={(api) => {
+          excalidrawApiRef.current = api;
+        }}
         initialData={initialData}
         onChange={handleChange}
         theme="dark"
@@ -217,39 +269,7 @@ export default function ExcalidrawCanvas({
       />
     </div>
   );
-}
+  }
+);
 
-// ── Exported force-sync helper (used by ConflictModal resolution) ──────────
-export function useCanvasForceSync(
-  diagramId: string,
-  sceneData: React.MutableRefObject<object>,
-  serverVersion: React.MutableRefObject<number>
-) {
-  return {
-    forceWrite: async () => {
-      const res = await fetch(`/api/diagrams/${diagramId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "sync",
-          sceneData: sceneData.current,
-          version: serverVersion.current,
-          force: true,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        serverVersion.current = data.version;
-      }
-    },
-    loadServer: async () => {
-      const res = await fetch(`/api/diagrams/${diagramId}`);
-      if (res.ok) {
-        const diagram = await res.json();
-        serverVersion.current = diagram.version;
-        await clearLocal(diagramId);
-        return diagram.sceneData;
-      }
-    },
-  };
-}
+export default ExcalidrawCanvas;

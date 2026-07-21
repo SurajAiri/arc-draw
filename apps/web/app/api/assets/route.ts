@@ -1,5 +1,8 @@
+import { db } from "@/lib/db";
+import { diagrams } from "@/lib/db/schema";
 import { requireAuth } from "@/lib/auth/middleware";
 import { uploadAsset } from "@/lib/s3";
+import { and, eq } from "drizzle-orm";
 
 // POST /api/assets — upload an image and store in MinIO/R2
 export async function POST(request: Request) {
@@ -12,6 +15,18 @@ export async function POST(request: Request) {
 
   if (!file || !diagramId) {
     return Response.json({ error: "Missing file or diagramId" }, { status: 400 });
+  }
+
+  // Verify the diagram exists and belongs to the authenticated user before
+  // attaching an asset to it — never trust a client-supplied diagramId.
+  const [owned] = await db
+    .select({ id: diagrams.id })
+    .from(diagrams)
+    .where(and(eq(diagrams.id, diagramId), eq(diagrams.userId, auth.userId)))
+    .limit(1);
+
+  if (!owned) {
+    return Response.json({ error: "Not found" }, { status: 404 });
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
