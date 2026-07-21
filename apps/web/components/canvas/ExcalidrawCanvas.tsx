@@ -13,7 +13,71 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Cat } from "lucide-react";
 import { saveLocal, clearLocal } from "@/lib/idb";
 import type { SyncState } from "@/components/canvas/SyncStatus";
-import IconPicker from "@/components/canvas/IconPicker";
+import IconPicker, { type PickedIcon } from "@/components/canvas/IconPicker";
+
+// A stamped icon is either a bundled Lucide icon (rendered live from the
+// lucide-react component) or an Iconify icon (rendered from a fetched SVG
+// template). Both ultimately resolve to an SVG string we can recolor and
+// embed as an Excalidraw image file.
+type IconSource =
+  | { kind: "lucide"; name: string }
+  | { kind: "iconify"; id: string; svgTemplate: string };
+
+function iconSourceFromCustomData(customData: any): IconSource | null {
+  if (!customData) return null;
+  if (customData.lucideIcon) {
+    return { kind: "lucide", name: customData.lucideIcon };
+  }
+  if (customData.iconifyIcon && customData.iconifySvgTemplate) {
+    return {
+      kind: "iconify",
+      id: customData.iconifyIcon,
+      svgTemplate: customData.iconifySvgTemplate,
+    };
+  }
+  return null;
+}
+
+function customDataFromIconSource(icon: IconSource) {
+  return icon.kind === "lucide"
+    ? { lucideIcon: icon.name }
+    : { iconifyIcon: icon.id, iconifySvgTemplate: icon.svgTemplate };
+}
+
+// Renders an icon source to a colored SVG string. Lucide icons are re-rendered
+// live via React (they accept a `stroke` prop); Iconify icons are fetched once
+// as a template with `currentColor` placeholders and recolored with a string
+// swap, so no network call is needed after the initial fetch.
+function renderIconSvgString(icon: IconSource, color: string): string {
+  if (icon.kind === "lucide") {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const LucideIcons = require("lucide-react");
+    const IconComponent = LucideIcons[icon.name];
+    if (!IconComponent) return "";
+    return renderToStaticMarkup(
+      <IconComponent
+        xmlns="http://www.w3.org/2000/svg"
+        width="100"
+        height="100"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />,
+    );
+  }
+  // Iconify icons: most icon sets are monochrome and use currentColor for
+  // fill/stroke — swap it for the target color. Multi-color icons (logos,
+  // emoji, etc.) simply won't have a currentColor to replace and are
+  // inserted with their original colors intact.
+  return icon.svgTemplate.replace(/currentColor/gi, color);
+}
+
+function dataURLFromSvgString(svgString: string): string {
+  return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgString)))}`;
+}
 
 const ICON_COLORS = [
   "#1e1e1e", // dark gray
@@ -152,6 +216,19 @@ function useDebounce<T extends unknown[]>(
   delay: number,
 ) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Without this, a pending timer from a component that has since unmounted
+  // (e.g. the user navigated back to the dashboard) keeps ticking in the
+  // background and fires *after* a fresh mount of the same diagram has
+  // already saved newer edits — silently overwriting them with the older
+  // snapshot. Clearing on unmount guarantees a stale save/sync can never
+  // fire after the fact.
+  useEffect(() => {
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, []);
+
   return useCallback(
     (...args: T) => {
       if (timer.current) clearTimeout(timer.current);
@@ -177,6 +254,8 @@ const ExcalidrawCanvas = forwardRef<
   // Track the server version we last successfully synced
   const serverVersionRef = useRef<number>(initialVersion);
   const sceneDataRef = useRef<object>(initialSceneData);
+  // True whenever sceneDataRef holds edits the server hasn't confirmed yet.
+  const isDirtyRef = useRef(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const excalidrawApiRef = useRef<any>(null);
   const [backgroundColor, setBackgroundColor] = useState<string>(() =>
@@ -187,10 +266,8 @@ const ExcalidrawCanvas = forwardRef<
     x: number;
     y: number;
   } | null>(null);
-  const [activeIconToInsert, setActiveIconToInsert] = useState<{
-    name: string;
-    component: React.ElementType;
-  } | null>(null);
+  const [activeIconToInsert, setActiveIconToInsert] =
+    useState<IconSource | null>(null);
 
   const [hasSelectedIcon, setHasSelectedIcon] = useState(false);
   const [selectedIconColor, setSelectedIconColor] = useState("#ffffff");
@@ -254,6 +331,7 @@ const ExcalidrawCanvas = forwardRef<
         if (res.ok) {
           const data = await res.json();
           serverVersionRef.current = data.version;
+          isDirtyRef.current = false;
           setSyncState("saved");
         } else if (res.status === 401) {
           // Token expired — try refresh, then retry once (only if the
@@ -331,7 +409,8 @@ const ExcalidrawCanvas = forwardRef<
 
       for (let i = 0; i < updatedElements.length; i++) {
         const el = updatedElements[i];
-        if (el.type === "image" && el.customData?.lucideIcon) {
+        const iconSource = el.type === "image" ? iconSourceFromCustomData(el.customData) : null;
+        if (iconSource) {
           const currentTrackedColor = iconColorsRef.current[el.id];
 
           if (!currentTrackedColor) {
@@ -343,26 +422,10 @@ const ExcalidrawCanvas = forwardRef<
             // User changed the color via the Excalidraw sidebar!
             iconColorsRef.current[el.id] = el.strokeColor;
 
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const LucideIcons = require("lucide-react");
-            const IconComponent = LucideIcons[el.customData.lucideIcon];
-            if (IconComponent) {
-              const renderColor = getActualRenderColor(el.strokeColor, _appState, isExporting);
-              const svgString = renderToStaticMarkup(
-                <IconComponent
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="100"
-                  height="100"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke={renderColor}
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />,
-              );
-
-              const dataURL = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgString)))}`;
+            const renderColor = getActualRenderColor(el.strokeColor, _appState, isExporting);
+            const svgString = renderIconSvgString(iconSource, renderColor);
+            if (svgString) {
+              const dataURL = dataURLFromSvgString(svgString);
               const newFileId = `icon-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
               newFiles.push({
@@ -389,7 +452,7 @@ const ExcalidrawCanvas = forwardRef<
         (el: any) =>
           _appState.selectedElementIds[el.id] &&
           el.type === "image" &&
-          el.customData?.lucideIcon,
+          !!iconSourceFromCustomData(el.customData),
       );
 
       let newSelectedColor = null;
@@ -397,7 +460,7 @@ const ExcalidrawCanvas = forwardRef<
         if (
           _appState.selectedElementIds[el.id] &&
           el.type === "image" &&
-          el.customData?.lucideIcon
+          iconSourceFromCustomData(el.customData)
         ) {
           newSelectedColor = el.strokeColor;
           break;
@@ -431,6 +494,7 @@ const ExcalidrawCanvas = forwardRef<
         // We don't persist appState to avoid locking viewport across sessions
       };
       sceneDataRef.current = sceneData;
+      isDirtyRef.current = true;
       // Show "Saving…" only briefly — debouncedLocalSave will resolve it
       // to "Saved" once IDB write completes (~1 s), not after 10 s.
       setSyncState("saving");
@@ -459,6 +523,7 @@ const ExcalidrawCanvas = forwardRef<
         const data = await res.json();
         serverVersionRef.current = data.version;
         sceneDataRef.current = data.sceneData;
+        isDirtyRef.current = false;
         await clearLocal(diagramId);
         const elements =
           (data.sceneData as { elements?: ExcalidrawElement[] })?.elements ??
@@ -471,6 +536,28 @@ const ExcalidrawCanvas = forwardRef<
   );
 
   // ── Force-flush on tab hide / page unload ──────────────────────────────────
+  const flushToServer = useCallback(
+    (data: object) => {
+      // navigator.sendBeacon only ever issues a POST, but this API route
+      // only implements PATCH — the beacon was silently 405'ing and the
+      // "last edit before closing the tab" never actually reached the
+      // server. `fetch` with `keepalive: true` supports the real PATCH
+      // method and, like sendBeacon, is allowed to outlive page teardown.
+      fetch(`/api/diagrams/${diagramId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({
+          type: "sync",
+          sceneData: data,
+          version: serverVersionRef.current,
+          force: false,
+        }),
+      }).catch(() => {});
+    },
+    [diagramId],
+  );
+
   useEffect(() => {
     function handleVisibilityChange() {
       if (document.visibilityState === "hidden") {
@@ -478,21 +565,8 @@ const ExcalidrawCanvas = forwardRef<
         if (data) {
           // Synchronous IDB flush for local persistence
           saveLocal(diagramId, data, serverVersionRef.current).catch(console.error);
+          if (isDirtyRef.current) flushToServer(data);
         }
-
-        // navigator.sendBeacon for reliable delivery on tab close
-        const blob = new Blob(
-          [
-            JSON.stringify({
-              type: "sync",
-              sceneData: data,
-              version: serverVersionRef.current,
-              force: false,
-            }),
-          ],
-          { type: "application/json" },
-        );
-        navigator.sendBeacon(`/api/diagrams/${diagramId}`, blob);
       }
     }
 
@@ -502,12 +576,16 @@ const ExcalidrawCanvas = forwardRef<
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("pagehide", handleVisibilityChange);
-      // Final flush on unmount
+      // Final flush on unmount (e.g. navigating back to the dashboard).
+      // We now cancel pending debounce timers on unmount (see useDebounce),
+      // so this is the only thing left to guarantee the last edit actually
+      // reaches both local storage and the server before the component goes away.
       if (sceneDataRef.current) {
         saveLocal(diagramId, sceneDataRef.current, serverVersionRef.current).catch(console.error);
+        if (isDirtyRef.current) flushToServer(sceneDataRef.current);
       }
     };
-  }, [diagramId]);
+  }, [diagramId, flushToServer]);
 
   // ── Initial scene ────────────────────────────────────────────────────────
   // The page component has already resolved local-vs-server and picked the
@@ -526,37 +604,22 @@ const ExcalidrawCanvas = forwardRef<
 
     // Reconstruct missing binary SVG files for custom icons since we don't persist them to save space
     for (const el of elements) {
-      if (el.type === "image" && el.customData?.lucideIcon) {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const LucideIcons = require("lucide-react");
-        const IconComponent = LucideIcons[el.customData.lucideIcon];
-        if (IconComponent) {
-          const renderColor = getActualRenderColor(
-            el.strokeColor,
-            { theme: "dark" },
-            false,
-          );
-          const svgString = renderToStaticMarkup(
-            <IconComponent
-              xmlns="http://www.w3.org/2000/svg"
-              width="100"
-              height="100"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke={renderColor}
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />,
-          );
-          const dataURL = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgString)))}`;
-          files[el.fileId!] = {
-            id: el.fileId!,
-            dataURL,
-            mimeType: "image/svg+xml",
-            created: Date.now(),
-          };
-        }
+      if (el.type !== "image") continue;
+      const iconSource = iconSourceFromCustomData(el.customData);
+      if (!iconSource) continue;
+      const renderColor = getActualRenderColor(
+        el.strokeColor,
+        { theme: "dark" },
+        false,
+      );
+      const svgString = renderIconSvgString(iconSource, renderColor);
+      if (svgString) {
+        files[el.fileId!] = {
+          id: el.fileId!,
+          dataURL: dataURLFromSvgString(svgString),
+          mimeType: "image/svg+xml",
+          created: Date.now(),
+        };
       }
     }
 
@@ -591,7 +654,7 @@ const ExcalidrawCanvas = forwardRef<
       if (
         excalidrawAPI.getAppState().selectedElementIds[el.id] &&
         el.type === "image" &&
-        el.customData?.lucideIcon
+        iconSourceFromCustomData(el.customData)
       ) {
         return {
           ...el,
@@ -616,13 +679,14 @@ const ExcalidrawCanvas = forwardRef<
   }, [backgroundColor, applyBackground]);
 
   // ── Handle Insert Icon (Stamp Mode) ───────────────────────────────────────
-  const handleSelectIcon = useCallback(
-    (name: string, IconComponent: React.ElementType) => {
-      setActiveIconToInsert({ name, component: IconComponent });
-      setIconPickerPos(null);
-    },
-    [],
-  );
+  const handleSelectIcon = useCallback((icon: PickedIcon) => {
+    setActiveIconToInsert(
+      icon.kind === "lucide"
+        ? { kind: "lucide", name: icon.name }
+        : { kind: "iconify", id: icon.id, svgTemplate: icon.svgTemplate },
+    );
+    setIconPickerPos(null);
+  }, []);
 
   const handlePointerDownCapture = useCallback(
     (e: React.PointerEvent) => {
@@ -649,21 +713,8 @@ const ExcalidrawCanvas = forwardRef<
         const isExporting = appState.openDialog?.name === "imageExport";
         const renderColor = getActualRenderColor(strokeColor, appState, isExporting);
 
-        const svgString = renderToStaticMarkup(
-          <activeIconToInsert.component
-            xmlns="http://www.w3.org/2000/svg"
-            width="100"
-            height="100"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke={renderColor}
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />,
-        );
-
-        const dataURL = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgString)))}`;
+        const svgString = renderIconSvgString(activeIconToInsert, renderColor);
+        const dataURL = dataURLFromSvgString(svgString);
         const fileId = `icon-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         const elementId = `icon_element_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 
@@ -704,9 +755,7 @@ const ExcalidrawCanvas = forwardRef<
           updated: Date.now(),
           link: null,
           locked: false,
-          customData: {
-            lucideIcon: activeIconToInsert.name,
-          },
+          customData: customDataFromIconSource(activeIconToInsert),
         };
 
         drawingIconRef.current = { id: elementId, startX, startY };
@@ -933,16 +982,16 @@ const ExcalidrawCanvas = forwardRef<
         )}
       />
 
-      {/* Floating Left Color Picker (below Excalidraw's native properties panel) */}
+      {/* Floating Right Color Picker (below Excalidraw's top-right toolbar UI) */}
       {hasSelectedIcon && (
         <div
-          className="absolute left-4 top-[400px] z-[5] flex flex-col gap-3 p-3 bg-card border border-border/60 rounded-xl shadow-sm animate-in fade-in slide-in-from-left-2 duration-200 pointer-events-auto"
+          className="absolute right-4 top-20 z-[5] flex flex-col items-center gap-2.5 p-2.5 w-16 bg-card border border-border/60 rounded-xl shadow-sm animate-in fade-in slide-in-from-right-2 duration-200 pointer-events-auto"
           onPointerDown={(e) => e.stopPropagation()} // prevent drawing behind the panel
         >
-          <span className="text-[11px] font-semibold text-foreground tracking-wide uppercase">
-            Icon Color
+          <span className="text-[10px] font-semibold text-foreground tracking-wide uppercase text-center">
+            Color
           </span>
-          <div className="grid grid-cols-5 gap-1.5">
+          <div className="grid grid-cols-2 gap-1.5">
             {ICON_COLORS.map((color) =>
               color === "custom" ? (
                 <div
