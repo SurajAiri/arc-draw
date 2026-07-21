@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Loader2, LayoutGrid, Layers } from "lucide-react";
 import DiagramCard from "@/components/dashboard/DiagramCard";
+import { fetchWithAuth } from "@/lib/auth/fetchWithAuth";
 
 interface DiagramMeta {
   id: string;
@@ -24,8 +25,10 @@ export default function DashboardPage() {
 
   const fetchDiagrams = useCallback(async () => {
     try {
-      const res = await fetch("/api/diagrams");
+      const res = await fetchWithAuth("/api/diagrams");
       if (res.status === 401) {
+        // Access token AND the 30-day refresh token are both no good —
+        // this is a real logged-out state, not just routine token rotation.
         router.push("/login");
         return;
       }
@@ -45,7 +48,7 @@ export default function DashboardPage() {
   async function handleCreate() {
     setCreating(true);
     try {
-      const res = await fetch("/api/diagrams", { method: "POST" });
+      const res = await fetchWithAuth("/api/diagrams", { method: "POST" });
       if (!res.ok) throw new Error("Failed");
       const diagram = await res.json();
       router.push(`/diagram/${diagram.id}`);
@@ -57,7 +60,7 @@ export default function DashboardPage() {
 
   async function handleDelete(id: string) {
     setDiagrams((prev) => prev.filter((d) => d.id !== id));
-    const res = await fetch(`/api/diagrams/${id}`, { method: "DELETE" });
+    const res = await fetchWithAuth(`/api/diagrams/${id}`, { method: "DELETE" });
     if (!res.ok) {
       setError("Failed to delete diagram");
       fetchDiagrams(); // re-fetch to restore state
@@ -65,7 +68,7 @@ export default function DashboardPage() {
   }
 
   async function handleDuplicate(id: string) {
-    const res = await fetch(`/api/diagrams/${id}/duplicate`, { method: "POST" });
+    const res = await fetchWithAuth(`/api/diagrams/${id}/duplicate`, { method: "POST" });
     if (!res.ok) {
       setError("Failed to duplicate diagram");
       return;
@@ -77,7 +80,7 @@ export default function DashboardPage() {
     setDiagrams((prev) =>
       prev.map((d) => (d.id === id ? { ...d, title } : d))
     );
-    const res = await fetch(`/api/diagrams/${id}`, {
+    const res = await fetchWithAuth(`/api/diagrams/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "rename", title }),

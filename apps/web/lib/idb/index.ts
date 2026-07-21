@@ -11,6 +11,11 @@ export interface LocalDiagram {
   version: number;
   title?: string;
   savedAt: number; // Date.now()
+  // False whenever sceneData has edits the server hasn't confirmed yet —
+  // e.g. saved while offline. Lets a fresh page load (which starts with no
+  // in-memory "dirty" flag) know it still needs to push this diagram to the
+  // server rather than assuming a cached copy is already up to date.
+  synced?: boolean;
 }
 
 function openDB(): Promise<IDBDatabase> {
@@ -33,7 +38,8 @@ export async function saveLocal(
   id: string,
   sceneData: object,
   version: number,
-  title?: string
+  title?: string,
+  synced?: boolean
 ): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
@@ -48,8 +54,33 @@ export async function saveLocal(
         version,
         title: title ?? existing?.title,
         savedAt: Date.now(),
+        // Leave the flag alone when the caller isn't asserting it (e.g. a
+        // title-only rename doesn't touch scene content, so it shouldn't
+        // flip an already-synced diagram to "unsynced").
+        synced: synced ?? existing?.synced ?? false,
       };
       const putReq = store.put(record);
+      putReq.onsuccess = () => resolve();
+      putReq.onerror = () => reject(putReq.error);
+    };
+    getReq.onerror = () => reject(getReq.error);
+  });
+}
+
+/** Marks a cached diagram as confirmed-synced with the server, without touching its content. */
+export async function markSynced(id: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    const getReq = store.get(id);
+    getReq.onsuccess = () => {
+      const existing = getReq.result as LocalDiagram | undefined;
+      if (!existing) {
+        resolve(); // nothing cached locally for this diagram — nothing to mark
+        return;
+      }
+      const putReq = store.put({ ...existing, synced: true });
       putReq.onsuccess = () => resolve();
       putReq.onerror = () => reject(putReq.error);
     };

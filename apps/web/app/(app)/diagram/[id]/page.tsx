@@ -10,12 +10,17 @@ import ExcalidrawCanvas, {
 import SyncStatus, { type SyncState } from "@/components/canvas/SyncStatus";
 import ConflictModal from "@/components/canvas/ConflictModal";
 import { loadLocal, saveLocal } from "@/lib/idb";
+import { fetchWithAuth } from "@/lib/auth/fetchWithAuth";
 
 interface DiagramData {
   id: string;
   title: string;
   sceneData: object;
   version: number;
+  // Whether this content is confirmed saved on the server. Undefined/true
+  // means yes (e.g. it just came from the server); false means it was
+  // loaded from a local cache written while offline and still needs a push.
+  synced?: boolean;
 }
 
 interface DiagramEditorProps {
@@ -58,6 +63,10 @@ export default function DiagramEditorPage({ params }: DiagramEditorProps) {
           title: local.title ?? "Untitled Diagram",
           sceneData: local.sceneData,
           version: local.version,
+          // Treat unknown as "not confirmed" — worst case is one harmless
+          // extra sync attempt, which is better than silently losing edits
+          // that were made offline before this field existed.
+          synced: local.synced ?? false,
         });
         setTitleValue(local.title ?? "Untitled Diagram");
         setLoading(false);
@@ -66,10 +75,12 @@ export default function DiagramEditorPage({ params }: DiagramEditorProps) {
       // Always reconcile with the server in the background — this is the
       // source of truth for title/version even when we rendered from cache.
       try {
-        const res = await fetch(`/api/diagrams/${diagramId}`);
+        const res = await fetchWithAuth(`/api/diagrams/${diagramId}`);
         if (cancelled) return;
 
         if (res.status === 401) {
+          // Refresh already failed inside fetchWithAuth — the refresh token
+          // itself is gone/expired, so this is a genuine logged-out state.
           router.push("/login");
           return;
         }
@@ -126,7 +137,7 @@ export default function DiagramEditorPage({ params }: DiagramEditorProps) {
       return;
     }
     setRenamingTitle(false);
-    const res = await fetch(`/api/diagrams/${diagramId}`, {
+    const res = await fetchWithAuth(`/api/diagrams/${diagramId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "rename", title: trimmed }),
@@ -233,6 +244,7 @@ export default function DiagramEditorPage({ params }: DiagramEditorProps) {
           diagramId={diagramId}
           initialSceneData={diagram.sceneData}
           initialVersion={diagram.version}
+          initialSynced={diagram.synced}
           onSyncStateChange={setSyncState}
           onConflict={() => setShowConflict(true)}
         />

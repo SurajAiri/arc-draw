@@ -11,7 +11,8 @@ import {
 } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Cat } from "lucide-react";
-import { saveLocal, clearLocal } from "@/lib/idb";
+import { saveLocal, clearLocal, markSynced } from "@/lib/idb";
+import { fetchWithAuth } from "@/lib/auth/fetchWithAuth";
 import type { SyncState } from "@/components/canvas/SyncStatus";
 import IconPicker, { type PickedIcon } from "@/components/canvas/IconPicker";
 
@@ -122,6 +123,33 @@ function getActualRenderColor(hex: string, appState: any, isExporting: boolean) 
 // and icon sizing. Without this import the canvas renders as unstyled raw
 // DOM (giant unscaled icons, no toolbar chrome, help text with no layout).
 import "@excalidraw/excalidraw/index.css";
+
+// Structural deep-equal, order-independent for object keys. Needed instead of
+// a plain JSON.stringify comparison because Postgres jsonb (what sceneData is
+// stored as) does not preserve object key order — two scenes with identical
+// content can come back from the DB with keys in a different order than what
+// we sent, which would make a naive string comparison falsely report a
+// difference and show a conflict dialog for content that hasn't actually changed.
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || !a || !b) return false;
+
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b)) return false;
+    if (a.length !== b.length) return false;
+    return a.every((item, i) => deepEqual(item, b[i]));
+  }
+
+  const aKeys = Object.keys(a as Record<string, unknown>);
+  const bKeys = Object.keys(b as Record<string, unknown>);
+  if (aKeys.length !== bKeys.length) return false;
+  return aKeys.every((key) =>
+    deepEqual(
+      (a as Record<string, unknown>)[key],
+      (b as Record<string, unknown>)[key],
+    ),
+  );
+}
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ExcalidrawElement = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -199,6 +227,10 @@ interface ExcalidrawCanvasProps {
   diagramId: string;
   initialSceneData: object;
   initialVersion: number;
+  // False when initialSceneData came from a local cache written offline and
+  // hasn't been confirmed saved on the server yet. Defaults to true (assume
+  // synced) so normal server-loaded diagrams behave exactly as before.
+  initialSynced?: boolean;
   onSyncStateChange?: (state: SyncState) => void;
   onConflict?: () => void;
 }
@@ -246,6 +278,7 @@ const ExcalidrawCanvas = forwardRef<
     diagramId,
     initialSceneData,
     initialVersion,
+    initialSynced,
     onSyncStateChange,
     onConflict,
   },
@@ -255,7 +288,10 @@ const ExcalidrawCanvas = forwardRef<
   const serverVersionRef = useRef<number>(initialVersion);
   const sceneDataRef = useRef<object>(initialSceneData);
   // True whenever sceneDataRef holds edits the server hasn't confirmed yet.
-  const isDirtyRef = useRef(false);
+  // Seeded from initialSynced so a diagram reopened from an offline-written
+  // local cache is correctly treated as still needing a push, instead of
+  // silently sitting unsynced until the user happens to make another edit.
+  const isDirtyRef = useRef(initialSynced === false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const excalidrawApiRef = useRef<any>(null);
   const [backgroundColor, setBackgroundColor] = useState<string>(() =>
@@ -300,18 +336,32 @@ const ExcalidrawCanvas = forwardRef<
   );
 
   // ── Sync to server ─────────────────────────────────────────────────────────
-  // Uses a ref-to-latest-function pattern so the retry-after-refresh branch
-  // can call the current version of syncToServer without a stale/TDZ
-  // self-reference inside its own useCallback body.
-  const syncToServerRef = useRef<
-    (sceneData: object, force?: boolean) => Promise<void>
-  >(async () => {});
+  // 401s are handled transparently by fetchWithAuth (refresh + one retry),
+  // so this only has to worry about the happy path and genuine failures.
+  //
+  // syncInFlightRef/pendingSyncRef guard against overlapping requests: without
+  // this, two calls firing close together (e.g. React StrictMode's dev-only
+  // double effect invocation, or a flaky double "online" event) would both
+  // read the same serverVersionRef.current, send it to the server, and the
+  // second one would come back a *false* 409 conflict purely because the
+  // first one already bumped the version — not because of any real edit
+  // elsewhere. Only one request is ever in flight; anything that arrives
+  // while it's outstanding just asks for one more run once it settles.
+  const syncInFlightRef = useRef(false);
+  const pendingSyncRef = useRef<{ sceneData: object; force: boolean } | null>(
+    null,
+  );
 
   const syncToServer = useCallback(
     async (sceneData: object, force = false) => {
+      if (syncInFlightRef.current) {
+        pendingSyncRef.current = { sceneData, force };
+        return;
+      }
+      syncInFlightRef.current = true;
       setSyncState("syncing");
       try {
-        const res = await fetch(`/api/diagrams/${diagramId}`, {
+        const res = await fetchWithAuth(`/api/diagrams/${diagramId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -323,6 +373,40 @@ const ExcalidrawCanvas = forwardRef<
         });
 
         if (res.status === 409) {
+          // A version mismatch doesn't necessarily mean a *real* conflict —
+          // it can just mean our own cached version number is stale (e.g. a
+          // prior background flush on tab-hide succeeded on the server but,
+          // before the fix above, never made it back into IndexedDB). Check
+          // whether the server's content already matches what we're trying
+          // to send before bothering the user with the conflict dialog.
+          try {
+            const serverRes = await fetchWithAuth(`/api/diagrams/${diagramId}`);
+            if (serverRes.ok) {
+              const serverDiagram = await serverRes.json();
+              if (deepEqual(serverDiagram.sceneData, sceneData)) {
+                // Self-healing: the server already has exactly this content
+                // (our own edit got there some other way) — adopt its
+                // version number and move on. No data lost, no conflict.
+                serverVersionRef.current = serverDiagram.version;
+                isDirtyRef.current = false;
+                await saveLocal(
+                  diagramId,
+                  sceneData,
+                  serverDiagram.version,
+                  undefined,
+                  true,
+                );
+                setSyncState("saved");
+                return;
+              }
+              // Genuinely diverged — refresh our known version so that if
+              // the user picks "keep mine" (force overwrite), we're at
+              // least reporting accurate state in the meantime.
+              serverVersionRef.current = serverDiagram.version;
+            }
+          } catch {
+            // Couldn't check — fall through to the normal conflict UI.
+          }
           setSyncState("conflict");
           onConflict?.();
           return;
@@ -332,36 +416,74 @@ const ExcalidrawCanvas = forwardRef<
           const data = await res.json();
           serverVersionRef.current = data.version;
           isDirtyRef.current = false;
+          await markSynced(diagramId);
           setSyncState("saved");
-        } else if (res.status === 401) {
-          // Token expired — try refresh, then retry once (only if the
-          // refresh itself succeeded, otherwise we'd just 401 again).
-          const refreshRes = await fetch("/api/auth/refresh", {
-            method: "POST",
-          });
-          if (refreshRes.ok) {
-            await syncToServerRef.current(sceneData, force);
-          } else {
-            setSyncState("offline");
-          }
         } else {
+          // 401s are already retried transparently inside fetchWithAuth
+          // (access token refreshed + request replayed), so if we're still
+          // seeing a bad response here it's either a real signed-out session
+          // or a network/server hiccup — either way, "offline" is accurate:
+          // the edit is safe in IndexedDB and will sync on the next attempt.
           setSyncState("offline");
         }
       } catch {
         setSyncState("offline");
+      } finally {
+        syncInFlightRef.current = false;
+        const pending = pendingSyncRef.current;
+        pendingSyncRef.current = null;
+        if (pending) {
+          // Fire-and-forget: this re-enters syncToServer, which is safe now
+          // that syncInFlightRef has been cleared above.
+          syncToServer(pending.sceneData, pending.force);
+        }
       }
     },
     [diagramId, onConflict, setSyncState],
   );
 
+  // ── Retry sync when connectivity returns ────────────────────────────────────
+  // Without this, a diagram edited offline only re-syncs on the *next* edit
+  // (debouncedServerSync), which may never come if the user just walks away
+  // or reopens the tab later without touching the canvas again. This covers
+  // both "still on this page when the network comes back" and "opened this
+  // diagram from a local cache that was never confirmed synced."
   useEffect(() => {
-    syncToServerRef.current = syncToServer;
-  }, [syncToServer]);
+    if (isDirtyRef.current && navigator.onLine) {
+      syncToServer(sceneDataRef.current, false);
+    }
+
+    function handleOnline() {
+      if (isDirtyRef.current) {
+        syncToServer(sceneDataRef.current, false);
+      }
+    }
+
+    function handleOffline() {
+      // Immediate feedback instead of waiting ~10s for the next idle-debounce
+      // sync attempt to time out and discover we're offline the hard way.
+      setSyncState("offline");
+    }
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+    // Intentionally only re-binding when diagramId changes (i.e. a genuinely
+    // different diagram/mount) — syncToServer's own identity can change more
+    // often (e.g. onConflict re-renders) without needing to redo this setup.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diagramId]);
 
   // ── Debounced handlers ─────────────────────────────────────────────────────
   const debouncedLocalSave = useDebounce(
     async (sceneData: object) => {
-      await saveLocal(diagramId, sceneData, serverVersionRef.current);
+      // This only ever fires from handleChange, which sets isDirtyRef.current
+      // = true right before scheduling it — so the content saved here is
+      // always still-unconfirmed-by-the-server, hence synced: false.
+      await saveLocal(diagramId, sceneData, serverVersionRef.current, undefined, false);
       // Mark as locally saved immediately — server sync happens separately
       // on a longer debounce. This prevents "Saving…" from lingering for 10s.
       setSyncState("saved");
@@ -515,7 +637,7 @@ const ExcalidrawCanvas = forwardRef<
       },
       loadServer: async () => {
         setSyncState("syncing");
-        const res = await fetch(`/api/diagrams/${diagramId}`);
+        const res = await fetchWithAuth(`/api/diagrams/${diagramId}`);
         if (!res.ok) {
           setSyncState("offline");
           return;
@@ -543,6 +665,7 @@ const ExcalidrawCanvas = forwardRef<
       // "last edit before closing the tab" never actually reached the
       // server. `fetch` with `keepalive: true` supports the real PATCH
       // method and, like sendBeacon, is allowed to outlive page teardown.
+      const versionSent = serverVersionRef.current;
       fetch(`/api/diagrams/${diagramId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -550,10 +673,31 @@ const ExcalidrawCanvas = forwardRef<
         body: JSON.stringify({
           type: "sync",
           sceneData: data,
-          version: serverVersionRef.current,
+          version: versionSent,
           force: false,
         }),
-      }).catch(() => {});
+      })
+        .then(async (res) => {
+          // THE ROOT CAUSE of the "409 on every reopen" bug: this used to be
+          // pure fire-and-forget, so a flush that succeeded right before a
+          // tab-hide/navigation (the common case — the JS runtime survives a
+          // same-app navigation even though this component unmounts) never
+          // updated IndexedDB. The cache kept the pre-flush version forever,
+          // so the *next* time this diagram opened, every sync attempt sent
+          // a version the server had already moved past — guaranteed 409,
+          // every single time, regardless of actual connectivity.
+          if (res.ok) {
+            const result = await res.json();
+            saveLocal(diagramId, data, result.version, undefined, true).catch(
+              console.error,
+            );
+          }
+          // A real page close races this against process teardown — if it
+          // doesn't get to run, the 409 self-heal check in syncToServer
+          // (below) covers it on next open instead of ever showing a false
+          // conflict.
+        })
+        .catch(() => {});
     },
     [diagramId],
   );
@@ -563,8 +707,11 @@ const ExcalidrawCanvas = forwardRef<
       if (document.visibilityState === "hidden") {
         const data = sceneDataRef.current;
         if (data) {
-          // Synchronous IDB flush for local persistence
-          saveLocal(diagramId, data, serverVersionRef.current).catch(console.error);
+          // Synchronous IDB flush for local persistence. flushToServer below
+          // is fire-and-forget (keepalive beacon-style) — we don't get a
+          // confirmation back, so if there were unsynced edits we keep the
+          // cached copy marked unsynced until a real sync response confirms it.
+          saveLocal(diagramId, data, serverVersionRef.current, undefined, !isDirtyRef.current).catch(console.error);
           if (isDirtyRef.current) flushToServer(data);
         }
       }
@@ -581,7 +728,7 @@ const ExcalidrawCanvas = forwardRef<
       // so this is the only thing left to guarantee the last edit actually
       // reaches both local storage and the server before the component goes away.
       if (sceneDataRef.current) {
-        saveLocal(diagramId, sceneDataRef.current, serverVersionRef.current).catch(console.error);
+        saveLocal(diagramId, sceneDataRef.current, serverVersionRef.current, undefined, !isDirtyRef.current).catch(console.error);
         if (isDirtyRef.current) flushToServer(sceneDataRef.current);
       }
     };
@@ -631,6 +778,10 @@ const ExcalidrawCanvas = forwardRef<
         // own dark-theme canvas color so white-stroke shapes look correct.
         viewBackgroundColor: savedBg,
         theme: "dark",
+        // Excalidraw's export dialog reads this independently of `theme` —
+        // without it, exports default to light mode regardless of what's on
+        // screen, which is why exported files looked different from the canvas.
+        exportWithDarkMode: true,
         gridModeEnabled: true,
         gridSize: GRID_SIZE,
       },
