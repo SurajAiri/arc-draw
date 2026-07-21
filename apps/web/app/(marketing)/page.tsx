@@ -88,6 +88,22 @@ const stack = [
   "AWS S3",
 ];
 
+function getGithubIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      height="24"
+      viewBox="0 0 16 16"
+      version="1.1"
+      width="24"
+      data-view-component="true"
+      fill="currentColor"
+    >
+      <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82A7.42 7.42 0 0 0 8 4c-.68 0-1.36.09-2 .28-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"></path>
+    </svg>
+  );
+}
+
 export default async function LandingPage() {
   const cookieStore = await cookies();
   const isAuthenticated =
@@ -96,7 +112,6 @@ export default async function LandingPage() {
   return (
     <div className="min-h-screen overflow-x-hidden">
       <MarketingNav isAuthenticated={isAuthenticated} />
-
       {/* ---------------- Hero ---------------- */}
       <section className="relative pt-36 pb-20 px-6">
         <div className="absolute inset-0 grid-bg opacity-40 [mask-image:radial-gradient(ellipse_65%_55%_at_50%_0%,black,transparent)]" />
@@ -122,8 +137,8 @@ export default async function LandingPage() {
               style={{ animationDelay: "160ms" }}
             >
               Arc Draw is an infinite-canvas whiteboard for architecture
-              diagrams and system design — built local-first, so it&apos;s
-              never blocked by a network.
+              diagrams and system design — built local-first, so it&apos;s never
+              blocked by a network.
             </p>
 
             <div
@@ -143,7 +158,7 @@ export default async function LandingPage() {
                 rel="noopener noreferrer"
                 className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl border border-border bg-card/60 text-foreground font-medium text-sm hover:bg-card transition-all"
               >
-                <ExternalLink className="w-4 h-4" />
+                {getGithubIcon()}
                 View on GitHub
               </a>
             </div>
@@ -189,7 +204,6 @@ export default async function LandingPage() {
           </div>
         </Reveal>
       </section>
-
       {/* ---------------- Logos / tech row ---------------- */}
       <section className="px-6 pb-24">
         <Reveal>
@@ -208,7 +222,6 @@ export default async function LandingPage() {
           </div>
         </Reveal>
       </section>
-
       {/* ---------------- Features ---------------- */}
       <section id="features" className="px-6 py-24 border-t border-border">
         <div className="max-w-6xl mx-auto">
@@ -244,7 +257,6 @@ export default async function LandingPage() {
           </div>
         </div>
       </section>
-
       {/* ---------------- How it works ---------------- */}
       <section
         id="how-it-works"
@@ -265,13 +277,39 @@ export default async function LandingPage() {
           </Reveal>
 
           <div className="relative grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div
-              className="hidden md:block absolute top-7 left-[16.6%] right-[16.6%] h-px bg-border"
+            {/* Connector: dashed sketch-style line running through the
+                center of each numbered node. Anchored at 1/6, 3/6, 5/6 —
+                the true center of each of the 3 equal-width columns —
+                and only renders once every icon below is also centered
+                within its column (see items-center below), otherwise the
+                dots drift to the left edge of each column while this
+                line still assumes centers. */}
+            <svg
+              className="hidden md:block absolute top-7 left-0 w-full h-px overflow-visible"
               aria-hidden
-            />
+            >
+              <line
+                x1="16.67%"
+                y1="0"
+                x2="83.33%"
+                y2="0"
+                stroke="var(--border)"
+                strokeWidth="1.5"
+                strokeDasharray="1 7"
+                strokeLinecap="round"
+              />
+            </svg>
+
             {steps.map((step, i) => (
-              <Reveal key={step.title} delay={i * 100} className="relative">
+              <Reveal
+                key={step.title}
+                delay={i * 100}
+                className="relative flex flex-col items-center md:items-center text-center md:text-center"
+              >
                 <div className="w-14 h-14 rounded-2xl border border-border bg-card flex items-center justify-center mb-5 relative z-10 font-mono text-sm text-muted-foreground">
+                  <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-secondary border border-border flex items-center justify-center text-[10px] text-muted-foreground">
+                    {i + 1}
+                  </span>
                   <step.icon className="w-6 h-6 text-foreground" />
                 </div>
                 <h3 className="font-medium text-foreground mb-2">
@@ -285,15 +323,14 @@ export default async function LandingPage() {
           </div>
         </div>
       </section>
-
       {/* ---------------- Screenshot showcase ---------------- */}
       <section id="preview" className="px-6 py-24 border-t border-border">
         <div className="max-w-6xl mx-auto">
           <Reveal className="max-w-xl mb-16">
-            <p className="text-xs font-mono uppercase tracking-widest text-[var(--marker)] mb-3">
+            <p className="text-xs font-mono uppercase tracking-widest text-(--marker) mb-3">
               Inside the canvas
             </p>
-            <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight mb-4 font-[family-name:var(--font-heading)]">
+            <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight mb-4 font-heading">
               A calm, monochrome workspace
             </h2>
             <p className="text-muted-foreground">
@@ -331,31 +368,53 @@ export default async function LandingPage() {
       {/* ---------------- CTA banner ---------------- */}
       <section className="px-6 py-24 border-t border-border">
         <Reveal className="max-w-4xl mx-auto text-center relative rounded-3xl border border-border bg-card/50 p-12 sm:p-16 overflow-hidden">
-          <div className="absolute inset-0 grid-bg opacity-30 [mask-image:radial-gradient(ellipse_70%_70%_at_50%_50%,black,transparent)]" aria-hidden />
+          <div
+            className="absolute inset-0 grid-bg opacity-30 [mask-image:radial-gradient(ellipse_70%_70%_at_50%_50%,black,transparent)]"
+            aria-hidden
+          />
+
+          <div className="relative inline-flex items-center gap-2 rounded-full border border-border bg-background/60 px-3.5 py-1.5 text-xs font-mono text-muted-foreground mb-6">
+            <span className="w-1.5 h-1.5 rounded-full bg-[oklch(0.72_0.15_155)]" />
+            {isAuthenticated ? "Synced and ready" : "Takes about 10 seconds"}
+          </div>
+
           <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight mb-4 relative font-[family-name:var(--font-heading)]">
-            {isAuthenticated
-              ? "Pick up right where you left off"
-              : (
-                <>
-                  Ready to sketch your <span className="marker-underline">next system</span>?
-                </>
-              )}
+            {isAuthenticated ? (
+              "Pick up right where you left off"
+            ) : (
+              <>
+                Ready to sketch your{" "}
+                <span className="marker-underline">next system</span>?
+              </>
+            )}
           </h2>
-          <p className="text-muted-foreground mb-8 relative">
+          <p className="text-muted-foreground mb-8 relative max-w-md mx-auto">
             {isAuthenticated
-              ? "Your diagrams are waiting in your dashboard."
+              ? "Your diagrams are waiting in your dashboard, exactly where you left them."
               : "Free to use, no credit card, offline from the first click."}
           </p>
-          <Link
-            href={isAuthenticated ? "/dashboard" : "/register"}
-            className="group relative inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-all"
-          >
-            {isAuthenticated ? "Go to dashboard" : "Create your workspace"}
-            <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
-          </Link>
+          <div className="relative flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link
+              href={isAuthenticated ? "/dashboard" : "/register"}
+              className="group inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-all"
+            >
+              {isAuthenticated ? "Go to dashboard" : "Create your workspace"}
+              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+            </Link>
+            {/* {!isAuthenticated && ( */}
+            <a
+              href="https://github.com/SurajAiri/arc-draw"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-border bg-background/60 text-foreground font-medium text-sm hover:bg-background transition-all"
+            >
+              {getGithubIcon()}
+              Star on GitHub
+            </a>
+            {/* )} */}
+          </div>
         </Reveal>
       </section>
-
       {/* ---------------- Footer ---------------- */}
       <footer className="px-6 py-10 border-t border-border">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -370,7 +429,7 @@ export default async function LandingPage() {
             className="text-muted-foreground hover:text-foreground transition-colors"
             aria-label="GitHub repository"
           >
-            <ExternalLink className="w-4 h-4" />
+            {getGithubIcon()}
           </a>
         </div>
       </footer>

@@ -1,0 +1,70 @@
+/*
+  Replaces the old .sketch-node / .sketch-line rules.
+  Add these alongside your existing --sketch-blue / --sketch-green /
+  --sketch-amber / --sketch-ink custom properties.
+*/
+
+/* Box outlines and connector lines: stroke-drawn using pathLength="1",
+   so dash values are always in normalized 0-1 space regardless of the
+   actual rendered length of the curve. No more eyeballing dasharray. */
+.sketch-shape {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: sketch-draw 0.55s ease-out forwards;
+  animation-delay: var(--sketch-delay);
+}
+
+@keyframes sketch-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Labels fade in just after their box finishes drawing */
+.sketch-label {
+  opacity: 0;
+  animation: sketch-fade 0.3s ease-out forwards;
+  animation-delay: var(--sketch-delay);
+}
+
+@keyframes sketch-fade {
+  to {
+    opacity: 1;
+  }
+}
+
+/* Pen-cursor dot: rides the closing squiggle's offset-path, then fades
+   out just before reaching the end so it doesn't just abruptly vanish. */
+.pen-dot {
+  offset-rotate: 0deg;
+  opacity: 0;
+  animation: pen-travel 0.9s ease-in-out forwards;
+  animation-delay: 2.0s;
+}
+
+@keyframes pen-travel {
+  0% {
+    opacity: 1;
+    offset-distance: 0%;
+  }
+  95% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    offset-distance: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sketch-shape,
+  .sketch-label,
+  .pen-dot {
+    animation: none;
+    opacity: 1;
+    stroke-dashoffset: 0;
+  }
+  .pen-dot {
+    display: none;
+  }
+}
