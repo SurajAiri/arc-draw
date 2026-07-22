@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Menu, X } from "lucide-react";
 import BrandMark from "@/components/marketing/BrandMark";
+import { useIsAuthenticated } from "@/lib/auth/useIsAuthenticated";
 
 const links = [
   { href: "#features", label: "Features" },
@@ -11,11 +12,8 @@ const links = [
   { href: "#preview", label: "Preview" },
 ];
 
-interface MarketingNavProps {
-  isAuthenticated?: boolean;
-}
-
-export default function MarketingNav({ isAuthenticated = false }: MarketingNavProps) {
+export default function MarketingNav() {
+  const isAuthenticated = useIsAuthenticated();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
 

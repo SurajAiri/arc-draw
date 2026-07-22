@@ -1,7 +1,4 @@
-import { cookies } from "next/headers";
-import Link from "next/link";
 import {
-  ArrowRight,
   Infinity as InfinityIcon,
   WifiOff,
   RefreshCw,
@@ -17,6 +14,8 @@ import MarketingNav from "@/components/marketing/MarketingNav";
 import Reveal from "@/components/marketing/Reveal";
 import SketchHero from "@/components/marketing/SketchHero";
 import BrandMark from "@/components/marketing/BrandMark";
+import AuthAwareCta from "@/components/marketing/AuthAwareCta";
+import AuthAwareCtaBanner from "@/components/marketing/AuthAwareCtaBanner";
 import Image from "next/image";
 
 const features = [
@@ -104,14 +103,10 @@ function getGithubIcon() {
   );
 }
 
-export default async function LandingPage() {
-  const cookieStore = await cookies();
-  const isAuthenticated =
-    cookieStore.has("access_token") || cookieStore.has("refresh_token");
-
+export default function LandingPage() {
   return (
     <div className="min-h-screen overflow-x-hidden">
-      <MarketingNav isAuthenticated={isAuthenticated} />
+      <MarketingNav />
       {/* ---------------- Hero ---------------- */}
       <section className="relative pt-36 pb-20 px-6">
         <div className="absolute inset-0 grid-bg opacity-40 [mask-image:radial-gradient(ellipse_65%_55%_at_50%_0%,black,transparent)]" />
@@ -145,13 +140,11 @@ export default async function LandingPage() {
               className="fade-up flex flex-col sm:flex-row items-center lg:items-start justify-center lg:justify-start gap-3"
               style={{ animationDelay: "240ms" }}
             >
-              <Link
-                href={isAuthenticated ? "/dashboard" : "/register"}
+              <AuthAwareCta
                 className="group w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-all"
-              >
-                {isAuthenticated ? "Go to dashboard" : "Start diagramming free"}
-                <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
-              </Link>
+                loggedOutLabel="Start diagramming free"
+                loggedInLabel="Go to dashboard"
+              />
               <a
                 href="https://github.com/SurajAiri/arc-draw"
                 target="_blank"
@@ -182,8 +175,17 @@ export default async function LandingPage() {
           </Reveal>
         </div>
 
-        {/* Product screenshot, framed like a browser window */}
-        <Reveal delay={250} className="relative max-w-5xl mx-auto mt-20">
+        {/* Product screenshot, framed like a browser window. This is the
+            page's LCP element, so it renders plainly (no Reveal wrapper —
+            that component starts at opacity:0 and only becomes visible
+            after client JS hydrates and an IntersectionObserver fires,
+            which would delay LCP by seconds). A light CSS-only fade-up
+            (same mechanism as the text above it) still gives it an entrance
+            without blocking paint. */}
+        <div
+          className="fade-up relative max-w-5xl mx-auto mt-20"
+          style={{ animationDelay: "250ms" }}
+        >
           <div className="rounded-2xl border border-border bg-card/40 p-2 sm:p-3">
             <div className="flex items-center gap-1.5 px-3 py-2.5">
               <span className="w-2.5 h-2.5 rounded-full bg-white/15" />
@@ -194,15 +196,18 @@ export default async function LandingPage() {
               </span>
             </div>
             <Image
-              src="/screenshots/dashboard.jpg"
+              src="/screenshots/dashboard.webp"
               width={1452}
               height={774}
               alt="Arc Draw canvas with a system architecture diagram"
               className="w-full rounded-xl border border-border/60"
+              sizes="(min-width: 1024px) 1024px, 100vw"
+              quality={75}
               priority
+              fetchPriority="high"
             />
           </div>
-        </Reveal>
+        </div>
       </section>
       {/* ---------------- Logos / tech row ---------------- */}
       <section className="px-6 pb-24">
@@ -342,11 +347,14 @@ export default async function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Reveal className="hover-lift rounded-2xl border border-border overflow-hidden">
               <Image
-                src="/screenshots/dashboard.jpg"
+                src="/screenshots/dashboard.webp"
                 alt="Arc Draw dashboard showing a grid of diagrams"
                 width={1452}
                 height={774}
                 className="w-full h-auto"
+                sizes="(min-width: 768px) 50vw, 100vw"
+                quality={75}
+                loading="lazy"
               />
             </Reveal>
             <Reveal
@@ -354,11 +362,14 @@ export default async function LandingPage() {
               className="hover-lift rounded-2xl border border-border overflow-hidden"
             >
               <Image
-                src="/screenshots/canvas-icons.jpg"
+                src="/screenshots/canvas-icons.webp"
                 alt="Arc Draw canvas with icon picker open"
                 width={1452}
                 height={774}
                 className="w-full h-auto"
+                sizes="(min-width: 768px) 50vw, 100vw"
+                quality={75}
+                loading="lazy"
               />
             </Reveal>
           </div>
@@ -373,35 +384,8 @@ export default async function LandingPage() {
             aria-hidden
           />
 
-          <div className="relative inline-flex items-center gap-2 rounded-full border border-border bg-background/60 px-3.5 py-1.5 text-xs font-mono text-muted-foreground mb-6">
-            <span className="w-1.5 h-1.5 rounded-full bg-[oklch(0.72_0.15_155)]" />
-            {isAuthenticated ? "Synced and ready" : "Takes about 10 seconds"}
-          </div>
-
-          <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight mb-4 relative font-[family-name:var(--font-heading)]">
-            {isAuthenticated ? (
-              "Pick up right where you left off"
-            ) : (
-              <>
-                Ready to sketch your{" "}
-                <span className="marker-underline">next system</span>?
-              </>
-            )}
-          </h2>
-          <p className="text-muted-foreground mb-8 relative max-w-md mx-auto">
-            {isAuthenticated
-              ? "Your diagrams are waiting in your dashboard, exactly where you left them."
-              : "Free to use, no credit card, offline from the first click."}
-          </p>
-          <div className="relative flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Link
-              href={isAuthenticated ? "/dashboard" : "/register"}
-              className="group inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-all"
-            >
-              {isAuthenticated ? "Go to dashboard" : "Create your workspace"}
-              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
-            </Link>
-            {/* {!isAuthenticated && ( */}
+          <AuthAwareCtaBanner />
+          <div className="relative flex flex-col sm:flex-row items-center justify-center gap-3 mt-3">
             <a
               href="https://github.com/SurajAiri/arc-draw"
               target="_blank"
@@ -411,7 +395,6 @@ export default async function LandingPage() {
               {getGithubIcon()}
               Star on GitHub
             </a>
-            {/* )} */}
           </div>
         </Reveal>
       </section>

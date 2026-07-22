@@ -1,28 +1,141 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { Search, Loader2 } from "lucide-react";
-import * as LucideIcons from "lucide-react";
+import {
+  Search,
+  Loader2,
+  Server,
+  Database,
+  HardDrive,
+  Cpu,
+  Cloud,
+  CloudLightning,
+  CloudRain,
+  Zap,
+  Network,
+  Wifi,
+  Globe,
+  Code,
+  Terminal,
+  TerminalSquare,
+  GitBranch,
+  GitCommit,
+  GitMerge,
+  GitPullRequest,
+  Webhook,
+  Box,
+  Layers,
+  Layout,
+  FileJson,
+  FileCode,
+  FileText,
+  Folder,
+  Archive,
+  Monitor,
+  Laptop,
+  Smartphone,
+  Tablet,
+  Tv,
+  Watch,
+  Shield,
+  Lock,
+  Unlock,
+  Key,
+  User,
+  Users,
+  Settings,
+  Mail,
+  Bell,
+  Calendar,
+  Home,
+  Activity,
+  Link as LinkIcon,
+  ExternalLink,
+  Share,
+  Trash,
+  Edit,
+  Plus,
+  Minus,
+  Check,
+  X,
+  ArrowRight,
+  ArrowLeft,
+  ArrowUp,
+  ArrowDown,
+  type LucideIcon,
+} from "lucide-react";
 
 // Developer and Architecture focused icons — shown instantly with no network
 // call, both as the default grid and as priority matches while searching.
-const DEV_ICONS = [
-  // Infrastructure / Cloud
-  "Server", "Database", "HardDrive", "Cpu", "Cloud", "CloudLightning", "CloudRain", "Zap", "Network", "Wifi", "Globe",
-  // Code / Development
-  "Code", "Terminal", "TerminalSquare", "GitBranch", "GitCommit", "GitMerge", "GitPullRequest", "Webhook", "Box", "Layers", "Layout",
-  // Files
-  "FileJson", "FileCode", "FileText", "Folder", "Archive",
-  // Devices
-  "Monitor", "Laptop", "Smartphone", "Tablet", "Tv", "Watch",
-  // Security
-  "Shield", "Lock", "Unlock", "Key",
-  // UI / General
-  "User", "Users", "Settings", "Search", "Mail", "Bell", "Calendar", "Home", "Activity", "Link", "ExternalLink", "Share", "Trash", "Edit", "Plus", "Minus", "Check", "X", "ArrowRight", "ArrowLeft", "ArrowUp", "ArrowDown",
-  // Social / Brands (Lucide has limited brands natively, but includes a few)
-  "Github", "Gitlab", "Trello", "Slack", "Figma", "Framer", "Twitter", "Youtube", "Linkedin", "Instagram", "Facebook", "Twitch"
-];
+// Named imports above + this lookup map (instead of `import * as
+// LucideIcons`) let the bundler tree-shake to only the ~65 icons actually
+// used here, rather than pulling in the entire icon library.
+const LUCIDE_ICON_MAP: Record<string, LucideIcon> = {
+  Server,
+  Database,
+  HardDrive,
+  Cpu,
+  Cloud,
+  CloudLightning,
+  CloudRain,
+  Zap,
+  Network,
+  Wifi,
+  Globe,
+  Code,
+  Terminal,
+  TerminalSquare,
+  GitBranch,
+  GitCommit,
+  GitMerge,
+  GitPullRequest,
+  Webhook,
+  Box,
+  Layers,
+  Layout,
+  FileJson,
+  FileCode,
+  FileText,
+  Folder,
+  Archive,
+  Monitor,
+  Laptop,
+  Smartphone,
+  Tablet,
+  Tv,
+  Watch,
+  Shield,
+  Lock,
+  Unlock,
+  Key,
+  User,
+  Users,
+  Settings,
+  Search,
+  Mail,
+  Bell,
+  Calendar,
+  Home,
+  Activity,
+  Link: LinkIcon,
+  ExternalLink,
+  Share,
+  Trash,
+  Edit,
+  Plus,
+  Minus,
+  Check,
+  X,
+  ArrowRight,
+  ArrowLeft,
+  ArrowUp,
+  ArrowDown,
+};
 
-// Verify they exist in lucide-react to prevent runtime errors
-const availableIcons = DEV_ICONS.filter(name => (LucideIcons as any)[name]);
+const DEV_ICONS = Object.keys(LUCIDE_ICON_MAP);
+
+// All names above come from the map itself, so this is always true — kept
+// as `availableIcons` (rather than inlining DEV_ICONS below) to minimize
+// the diff against the rest of the file, which reads from this name.
+const availableIcons = DEV_ICONS;
 
 // The result of picking an icon — either a bundled Lucide icon (rendered
 // live, no network needed) or an Iconify icon. For Iconify we hand back the
@@ -59,7 +172,7 @@ export default function IconPicker({
   onSelect,
   onClose,
 }: {
-  position: { x: number, y: number };
+  position: { x: number; y: number };
   onSelect: (icon: PickedIcon) => void;
   onClose: () => void;
 }) {
@@ -149,7 +262,7 @@ export default function IconPicker({
       const rect = pickerRef.current.getBoundingClientRect();
       let newX = position.x;
       let newY = position.y;
-      
+
       // Add a small offset so the cursor isn't directly on top of the modal
       newX += 10;
       newY += 10;
@@ -160,7 +273,7 @@ export default function IconPicker({
       if (newY + rect.height > window.innerHeight) {
         newY = window.innerHeight - rect.height - 20;
       }
-      
+
       setPos({ x: Math.max(10, newX), y: Math.max(10, newY) });
     }
   }, [position]);
@@ -174,12 +287,15 @@ export default function IconPicker({
 
   return (
     <>
-      <div 
-        className="fixed inset-0 z-[190]" 
-        onClick={onClose} 
-        onContextMenu={(e) => { e.preventDefault(); onClose(); }} 
+      <div
+        className="fixed inset-0 z-[190]"
+        onClick={onClose}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onClose();
+        }}
       />
-      <div 
+      <div
         ref={pickerRef}
         style={{ left: pos.x, top: pos.y }}
         className="fixed z-[200] glass rounded-xl border border-border/60 flex flex-col w-[320px] shadow-2xl h-[400px] bg-card/95 overflow-hidden animate-in fade-in zoom-in-95 duration-100"
@@ -207,7 +323,7 @@ export default function IconPicker({
           {filteredLucideIcons.length > 0 && (
             <div className="grid grid-cols-5 gap-2 content-start mb-1">
               {filteredLucideIcons.map((name) => {
-                const Icon = (LucideIcons as any)[name];
+                const Icon = LUCIDE_ICON_MAP[name];
                 return (
                   <button
                     key={`lucide-${name}`}
@@ -228,7 +344,9 @@ export default function IconPicker({
               {filteredLucideIcons.length > 0 && (
                 <div className="flex items-center gap-2 my-2">
                   <div className="h-px flex-1 bg-border/60" />
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">More icons</span>
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                    More icons
+                  </span>
                   <div className="h-px flex-1 bg-border/60" />
                 </div>
               )}
@@ -245,7 +363,12 @@ export default function IconPicker({
                       <Loader2 className="w-5 h-5 animate-spin" />
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={iconifyThumbnailSrc(iconId)} alt={iconId} width={20} height={20} />
+                      <img
+                        src={iconifyThumbnailSrc(iconId)}
+                        alt={iconId}
+                        width={20}
+                        height={20}
+                      />
                     )}
                   </button>
                 ))}
