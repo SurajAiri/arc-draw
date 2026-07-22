@@ -752,6 +752,46 @@ const ExcalidrawCanvas = forwardRef<
   // right sceneData/version before this component is mounted, so this only
   // needs to be computed once (lazy initializer) for Excalidraw's
   // initialData prop, which it reads only on mount.
+  //
+  // NOTE on the `files` we build here: Excalidraw has a long-standing quirk
+  // (github.com/excalidraw/excalidraw#7886) where SVG data-URL files passed
+  // through `initialData.files` are registered internally but don't trigger
+  // the image element's first paint — it sits as a placeholder until
+  // *something* forces a scene re-render (resizing the window, selecting the
+  // element, etc.). Since every stamped icon here is an SVG, that quirk hits
+  // 100% of icons on a fresh load (a different device/browser with no local
+  // cache, so nothing has called `addFiles` yet this session). Recoloring an
+  // icon "fixes" it purely as a side effect of going through `addFiles` +
+  // `updateScene` again — which is the same pair of calls we now make
+  // explicitly, once, right after mount (see the effect below) instead of
+  // relying on `initialData.files` alone.
+  const buildIconFiles = useCallback(
+    (elements: ExcalidrawElement[]): Record<string, any> => {
+      const files: Record<string, any> = {};
+      for (const el of elements) {
+        if (el.type !== "image" || el.isDeleted) continue;
+        const iconSource = iconSourceFromCustomData(el.customData);
+        if (!iconSource) continue;
+        const renderColor = getActualRenderColor(
+          el.strokeColor,
+          { theme: "dark" },
+          false,
+        );
+        const svgString = renderIconSvgString(iconSource, renderColor);
+        if (svgString) {
+          files[el.fileId!] = {
+            id: el.fileId!,
+            dataURL: dataURLFromSvgString(svgString),
+            mimeType: "image/svg+xml",
+            created: Date.now(),
+          };
+        }
+      }
+      return files;
+    },
+    [],
+  );
+
   const [initialData] = useState<{
     elements: ExcalidrawElement[];
     appState: Partial<AppState>;
@@ -760,32 +800,12 @@ const ExcalidrawCanvas = forwardRef<
     const savedBg = loadBgPref();
     const elements =
       (initialSceneData as { elements?: ExcalidrawElement[] }).elements ?? [];
-    const files: Record<string, any> = {};
-
-    // Reconstruct missing binary SVG files for custom icons since we don't persist them to save space
-    for (const el of elements) {
-      if (el.type !== "image") continue;
-      const iconSource = iconSourceFromCustomData(el.customData);
-      if (!iconSource) continue;
-      const renderColor = getActualRenderColor(
-        el.strokeColor,
-        { theme: "dark" },
-        false,
-      );
-      const svgString = renderIconSvgString(iconSource, renderColor);
-      if (svgString) {
-        files[el.fileId!] = {
-          id: el.fileId!,
-          dataURL: dataURLFromSvgString(svgString),
-          mimeType: "image/svg+xml",
-          created: Date.now(),
-        };
-      }
-    }
 
     return {
       elements,
-      files,
+      // Still passed for completeness/non-SVG file types — just not relied
+      // on for icons; those get re-added explicitly post-mount below.
+      files: buildIconFiles(elements),
       appState: {
         // Use the user's saved preference; "transparent" defers to Excalidraw's
         // own dark-theme canvas color so white-stroke shapes look correct.
@@ -800,6 +820,30 @@ const ExcalidrawCanvas = forwardRef<
       },
     };
   });
+
+  // Re-registers every stamped icon's SVG through `addFiles` once the
+  // Excalidraw API is available, working around the initialData.files SVG
+  // quirk described above. Runs once per mount (guarded by the ref) — after
+  // this, the existing onChange-driven addFiles calls (stamping, recoloring)
+  // keep everything in sync as normal.
+  const iconFilesReattachedRef = useRef(false);
+  const reattachIconFiles = useCallback(
+    (api: any) => {
+      if (!api || iconFilesReattachedRef.current) return;
+      iconFilesReattachedRef.current = true;
+
+      const elements = api.getSceneElements();
+      const files = buildIconFiles(elements);
+      const fileList = Object.values(files);
+      if (fileList.length === 0) return;
+
+      api.addFiles(fileList);
+      // Nudge the scene so Excalidraw actually repaints the now-registered
+      // images instead of leaving already-mounted placeholders stale.
+      api.updateScene({ elements });
+    },
+    [buildIconFiles],
+  );
 
   // ── Custom canvas background color ──────────────────────────────────────────
   const applyBackground = useCallback((color: string) => {
@@ -1078,6 +1122,9 @@ const ExcalidrawCanvas = forwardRef<
       <Excalidraw
         excalidrawAPI={(api: unknown) => {
           excalidrawApiRef.current = api;
+          // Deferred a tick so this runs after Excalidraw's own initial
+          // mount/render pass has settled, rather than racing it.
+          setTimeout(() => reattachIconFiles(api), 0);
         }}
         initialData={initialData}
         onChange={handleChange}
