@@ -384,18 +384,7 @@ export default function LandingPage() {
             aria-hidden
           />
 
-          <AuthAwareCtaBanner />
-          <div className="relative flex flex-col sm:flex-row items-center justify-center gap-3 mt-3">
-            <a
-              href="https://github.com/SurajAiri/arc-draw"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-border bg-background/60 text-foreground font-medium text-sm hover:bg-background transition-all"
-            >
-              {getGithubIcon()}
-              Star on GitHub
-            </a>
-          </div>
+          <AuthAwareCtaBanner githubIcon={getGithubIcon()} />
         </Reveal>
       </section>
       {/* ---------------- Footer ---------------- */}
