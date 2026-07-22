@@ -7,6 +7,7 @@ import {
 } from "@/lib/auth/jwt";
 import { and, eq, gt } from "drizzle-orm";
 import { cookies } from "next/headers";
+import { setAuthCookies } from "@/lib/auth/cookies";
 
 export async function POST() {
   const cookieStore = await cookies();
@@ -48,22 +49,10 @@ export async function POST() {
     expiresAt,
   });
 
-  const isProduction = process.env.NODE_ENV === "production";
-
-  cookieStore.set("access_token", newAccessToken, {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: "lax",
-    maxAge: 15 * 60,
-    path: "/",
-  });
-
-  cookieStore.set("refresh_token", newRefreshToken, {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: "lax",
-    maxAge: REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60,
-    path: "/",
+  setAuthCookies(cookieStore, {
+    accessToken: newAccessToken,
+    refreshToken: newRefreshToken,
+    refreshTokenMaxAge: REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60,
   });
 
   return Response.json({ ok: true });

@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { refreshTokens } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
+import { clearAuthCookies } from "@/lib/auth/cookies";
 
 export async function POST() {
   const cookieStore = await cookies();
@@ -15,9 +16,8 @@ export async function POST() {
       .catch(() => {}); // silently ignore if already gone
   }
 
-  // Clear both cookies
-  cookieStore.set("access_token", "", { maxAge: 0, path: "/" });
-  cookieStore.set("refresh_token", "", { maxAge: 0, path: "/" });
+  // Clear all auth cookies (real tokens + the client-readable marker)
+  clearAuthCookies(cookieStore);
 
   return Response.json({ ok: true });
 }

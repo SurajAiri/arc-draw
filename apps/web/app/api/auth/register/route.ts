@@ -9,6 +9,7 @@ import { eq } from "drizzle-orm";
 import argon2 from "argon2";
 import { z } from "zod";
 import { cookies } from "next/headers";
+import { setAuthCookies } from "@/lib/auth/cookies";
 
 const RegisterSchema = z.object({
   email: z.string().email(),
@@ -74,22 +75,10 @@ export async function POST(request: Request) {
   });
 
   const cookieStore = await cookies();
-  const isProduction = process.env.NODE_ENV === "production";
-
-  cookieStore.set("access_token", accessToken, {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: "lax",
-    maxAge: 15 * 60,
-    path: "/",
-  });
-
-  cookieStore.set("refresh_token", refreshToken, {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: "lax",
-    maxAge: REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60,
-    path: "/",
+  setAuthCookies(cookieStore, {
+    accessToken,
+    refreshToken,
+    refreshTokenMaxAge: REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60,
   });
 
   return Response.json({ ok: true }, { status: 201 });

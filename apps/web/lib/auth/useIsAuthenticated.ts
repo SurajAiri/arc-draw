@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AUTH_STATUS_COOKIE } from "@/lib/auth/cookies";
 
 /**
  * Reads auth state from cookies on the client.
@@ -17,15 +18,21 @@ import { useEffect, useState } from "react";
  * default (`false`) matches the logged-out state. Logged-in visitors get a
  * near-instant client-side swap after mount, which is an acceptable
  * trade-off for a piece of UI this small and non-critical.
+ *
+ * NOTE: this checks the `auth_status` marker cookie, not the real
+ * `access_token` / `refresh_token` cookies. Those are httpOnly on purpose
+ * (so client-side JS, and therefore XSS, can never read or steal them),
+ * which means `document.cookie` never contains them — checking for them
+ * directly would always read as logged out. `auth_status` is a separate,
+ * non-secret cookie set/cleared in lockstep with the real tokens purely so
+ * the client has something legitimate to read (see lib/auth/cookies.ts).
  */
 export function useIsAuthenticated(): boolean {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     const cookies = document.cookie;
-    setIsAuthenticated(
-      cookies.includes("access_token=") || cookies.includes("refresh_token=")
-    );
+    setIsAuthenticated(cookies.includes(`${AUTH_STATUS_COOKIE}=`));
   }, []);
 
   return isAuthenticated;
